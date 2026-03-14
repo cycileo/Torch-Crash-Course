@@ -70,8 +70,8 @@ def start_explorer(model, encode=None, decode=None, stoi=None, itos=None, port=N
         return_all = data.get("return_all", False)
         try:
             tokens = encode(text) if encode else [stoi.get(c, 0) for c in text]
-            if len(tokens) == 0:
-                tokens = [0]
+            # Always prepend [0] (pad/BOS token) to get the unconditional probability for the first char
+            tokens = [0] + tokens
             max_len = getattr(model, 'block_size', context_length)
             tokens = tokens[-max_len:]
             

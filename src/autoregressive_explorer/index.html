@@ -120,6 +120,15 @@
             transition: all 0.2s;
         }
 
+        .token-start {
+            color: #10b981;
+            opacity: 0.8;
+            font-weight: bold;
+            font-size: 0.8em;
+            margin-right: 2px;
+            user-select: none;
+        }
+
         .token-newline {
             color: #fbbf24;
             opacity: 0.8;
@@ -319,11 +328,9 @@
             seedInput.value = text;
             sequence = [];
             
-            if (text.length === 0) {
-                renderSequence();
-                return;
-            }
-
+            // Unconditional start marker
+            sequence.push({ char: '►', isStartMarker: true, nextLogits: null });
+            
             for (let i = 0; i < text.length; i++) {
                 sequence.push({ char: text[i], nextLogits: null });
             }
@@ -346,7 +353,10 @@
             sequence.forEach((item, index) => {
                 const span = document.createElement('span');
                 span.className = 'token';
-                if (item.char === '\n' || item.char === '\\n') {
+                if (item.isStartMarker) {
+                    span.textContent = item.char;
+                    span.classList.add('token-start');
+                } else if (item.char === '\n' || item.char === '\\n') {
                     span.textContent = '↵\n';
                     span.classList.add('token-newline');
                 } else {
@@ -442,7 +452,7 @@
             // Sort descending by probability
             probs.sort((a, b) => b.prob - a.prob);
 
-            const prevText = sequence.slice(0, index + 1).map(s => s.char).join('');
+            const prevText = sequence.slice(0, index + 1).filter(s => !s.isStartMarker).map(s => s.char).join('');
             const displayPrevText = prevText.length > 30 ? '...' + prevText.slice(-30) : prevText;
             const headerEscaped = displayPrevText.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -506,7 +516,7 @@
 
         // Backend Integration
         async function requestLogits() {
-            const currentString = sequence.map(s => s.char).join('');
+            const currentString = sequence.filter(s => !s.isStartMarker).map(s => s.char).join('');
             try {
                 const res = await fetch('get_logits', {
                     method: 'POST',
