@@ -6,40 +6,32 @@ import torch
 import logging
 import urllib.request
 import socket
-import subprocess
+import random
 from flask import Flask, request, jsonify
 from IPython.display import IFrame, display, HTML
 from werkzeug.serving import make_server
-import random
 
 os.environ["WERKZEUG_RUN_MAIN"] = "true"
 
 def start_explorer(model, encode=None, decode=None, stoi=None, itos=None, port=None, context_length=256):
-    print('debug 1')
+    print('debug 2')
     def is_port_in_use(p):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             return s.connect_ex(('127.0.0.1', p)) == 0
 
-    # 1. If a specific port was requested, aggressively try to clear it
     if port is not None:
         if is_port_in_use(port):
             try:
                 urllib.request.urlopen(f"http://127.0.0.1:{port}/_stop", timeout=1)
             except Exception:
                 pass
-            
-            # Robust polling loop to wait for it to actually die
             for _ in range(10):
                 if not is_port_in_use(port):
                     break
                 time.sleep(0.5)
-                
-            # If it is STILL locked, force fallback to random
             if is_port_in_use(port):
-                print(f"Port {port} is stubbornly locked. Switching to a random port.")
                 port = None
 
-    # 2. If port is None (default or fallback), find a guaranteed free random port
     if port is None:
         port = random.randint(10240, 65535)
         while is_port_in_use(port):
@@ -55,7 +47,7 @@ def start_explorer(model, encode=None, decode=None, stoi=None, itos=None, port=N
     @app.after_request
     def add_cors(response):
         response.headers['Access-Control-Allow-Origin'] = '*'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Bypass-Tunnel-Reminder'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
         return response
 
     @app.route("/")
@@ -70,13 +62,11 @@ def start_explorer(model, encode=None, decode=None, stoi=None, itos=None, port=N
 
     @app.route("/get_logits", methods=["POST", "OPTIONS"])
     def get_logits():
-        # FIX: Catch the CORS preflight request triggered by our custom header
         if request.method == "OPTIONS":
             return jsonify({}), 200
 
         data = request.json
         text = data.get("text", "").lower()
-        
         try:
             tokens = encode(text) if encode else [stoi.get(c, 0) for c in text]
             max_len = getattr(model, 'block_size', context_length)
@@ -111,47 +101,15 @@ def start_explorer(model, encode=None, decode=None, stoi=None, itos=None, port=N
         
         try:
             proxy_url = eval_js(f"google.colab.kernel.proxyPort({port})")
-        except Exception:
-            proxy_url = "#"
-        
-        try:
-            req = urllib.request.Request('https://loca.lt/mytunnelpassword')
-            req.add_header('User-Agent', 'Mozilla/5.0')
-            tunnel_password = urllib.request.urlopen(req).read().decode('utf8').strip()
-        except Exception:
-            try:
-                tunnel_password = urllib.request.urlopen('https://ipv4.icanhazip.com').read().decode('utf8').strip()
-            except:
-                tunnel_password = "Error fetching IP"
-        
-        lt_process = subprocess.Popen(
-            ['npx', 'localtunnel', '--port', str(port)],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
-        
-        lt_url = "#"
-        while True:
-            line = lt_process.stdout.readline()
-            if "your url is:" in line:
-                lt_url = line.split("your url is:")[1].strip()
-                break
-                
-        display(HTML(f"""
-            <div style="display: flex; gap: 15px; margin-bottom: 10px; font-family: sans-serif; max-width: 800px;">
-                <div style="flex: 1; padding: 15px; border: 1px solid #cbd5e1; border-radius: 8px; background: #f8fafc;">
-                    <h4 style="margin: 0 0 8px 0; color: #0f172a; font-size: 14px;">Option 1: Standard Tab</h4>
-                    <p style="margin: 0 0 12px 0; font-size: 12px; color: #475569;">Best for Chrome. Fast and secure.</p>
-                    <a href="{proxy_url}" target="_blank" style="display: inline-block; background: #2563eb; color: white; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-size: 13px; font-weight: bold;">↗️ Open Standard</a>
+            display(HTML(f"""
+                <div style="text-align: right; margin-bottom: 8px; font-family: sans-serif;">
+                    <a href="{proxy_url}" target="_blank" style="background: #f8fafc; color: #475569; padding: 6px 12px; border-radius: 6px; text-decoration: none; font-size: 12px; border: 1px solid #cbd5e1; transition: 0.2s;">
+                        ↗️ Open in New Tab (Fullscreen)
+                    </a>
                 </div>
-                <div style="flex: 1; padding: 15px; border: 1px solid #c084fc; border-radius: 8px; background: #faf5ff;">
-                    <h4 style="margin: 0 0 8px 0; color: #4c1d95; font-size: 14px;">Option 2: Universal (Safari)</h4>
-                    <p style="margin: 0 0 12px 0; font-size: 12px; color: #6b21a8;">If Option 1 fails. Password: <code style="background: #e9d5ff; padding: 2px 6px; border-radius: 4px; color: #7e22ce; font-weight: bold;">{tunnel_password}</code></p>
-                    <a href="{lt_url}" target="_blank" style="display: inline-block; background: #9333ea; color: white; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-size: 13px; font-weight: bold;">🌐 Open Universal</a>
-                </div>
-            </div>
-        """))
+            """))
+        except Exception:
+            pass
         
         output.serve_kernel_port_as_iframe(port, height='600')
     else:
