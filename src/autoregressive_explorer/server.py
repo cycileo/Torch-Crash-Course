@@ -16,6 +16,13 @@ cli = sys.modules.get('flask.cli', None)
 if cli is not None:
     cli.show_server_banner = lambda *x: None
 
+def get_base_url(port=7385):
+    if 'google.colab' in sys.modules:
+        from google.colab.output import eval_js
+        # Generates a secure https://... URL tunneling to the Colab VM port
+        return eval_js(f"google.colab.kernel.proxyPort({port})")
+    return f"http://localhost:{port}/"
+
 def start_explorer(model, encode=None, decode=None, stoi=None, itos=None, port=54321, context_length=256):
     """
     Starts a background Flask server and displays the Autoregressive Explorer UI in the notebook.
@@ -47,6 +54,9 @@ def start_explorer(model, encode=None, decode=None, stoi=None, itos=None, port=5
     html_path = os.path.join(os.path.dirname(__file__), 'index.html')
     with open(html_path, 'r', encoding='utf-8') as f:
         html_content = f.read()
+
+    SERVER_URL = get_base_url(port)
+    html_content = html_content.replace("{SERVER_URL}", SERVER_URL)
 
     @app.after_request
     def after_request(response):
@@ -143,6 +153,6 @@ def start_explorer(model, encode=None, decode=None, stoi=None, itos=None, port=5
     time.sleep(1) # Let server boot
 
     # Display in notebook
-    display(IFrame(src=f"http://localhost:{port}", width="100%", height="450px"))
+    display(IFrame(src=SERVER_URL, width="100%", height="450px"))
 
     return server_thread

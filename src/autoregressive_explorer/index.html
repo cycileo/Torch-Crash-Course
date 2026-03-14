@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <title>Autoregressive Explorer</title>
@@ -14,6 +15,7 @@
             --tooltip-bg: #16202b;
             --border-color: #3f3f46;
         }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background-color: var(--bg-color);
@@ -25,8 +27,10 @@
             display: flex;
             flex-direction: column;
             overflow: hidden;
-            user-select: none; /* Prevent accidental text selection on spam-click */
+            user-select: none;
+            /* Prevent accidental text selection on spam-click */
         }
+
         .controls-card {
             flex-shrink: 0;
             background-color: rgba(255, 255, 255, 0.05);
@@ -38,8 +42,9 @@
             gap: 10px;
             margin-bottom: 10px;
             border: 1px solid var(--border-color);
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
+
         input[type="text"] {
             padding: 8px 12px;
             background-color: rgba(255, 255, 255, 0.1);
@@ -49,10 +54,12 @@
             font-size: 14px;
             width: 200px;
         }
+
         input[type="text"]:focus {
             outline: none;
             border-color: #8b5cf6;
         }
+
         button {
             padding: 8px 16px;
             background-color: var(--btn-bg);
@@ -64,30 +71,36 @@
             font-size: 14px;
             transition: background-color 0.2s;
         }
+
         button:hover:not(:disabled) {
             background-color: var(--btn-hover);
         }
+
         button:disabled {
             opacity: 0.5;
             cursor: not-allowed;
         }
+
         .slider-group {
             display: flex;
             align-items: center;
             gap: 10px;
         }
+
         .toggle-group {
             display: flex;
             align-items: center;
             gap: 8px;
             user-select: none;
         }
+
         input[type="checkbox"] {
             width: 16px;
             height: 16px;
             accent-color: var(--btn-bg);
             cursor: pointer;
         }
+
         .sequence-display {
             flex-grow: 1;
             overflow-y: auto;
@@ -98,41 +111,55 @@
             padding: 15px;
             background-color: rgba(0, 0, 0, 0.2);
             border-radius: 8px;
-            border: 1px solid rgba(255,255,255,0.05);
+            border: 1px solid rgba(255, 255, 255, 0.05);
         }
+
         .token {
             border-radius: 2px;
             cursor: pointer;
             transition: all 0.2s;
         }
+
         .token-newline {
             color: #fbbf24;
             opacity: 0.8;
         }
+
         @keyframes flashYellow {
-            0% { background-color: rgba(250, 204, 21, 0.8); color: black; }
-            100% { background-color: transparent; }
+            0% {
+                background-color: rgba(250, 204, 21, 0.8);
+                color: black;
+            }
+
+            100% {
+                background-color: transparent;
+            }
         }
+
         .flash-new {
             animation: flashYellow 0.8s ease-out forwards;
         }
+
         .token:hover {
             background-color: rgba(255, 255, 255, 0.1);
         }
+
         .highlighted {
             background-color: var(--highlight-bg) !important;
             box-shadow: 0 0 0 2px var(--highlight-bg);
         }
+
         .dimmed {
             opacity: var(--dim-opacity);
         }
+
         .tooltip {
             position: fixed;
             background: var(--tooltip-bg);
             border: 1px solid var(--border-color);
             border-radius: 8px;
             padding: 12px;
-            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.5);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
             display: none;
             z-index: 1000;
             font-family: "JetBrains Mono", Consolas, Menlo, monospace;
@@ -140,6 +167,7 @@
             min-width: 220px;
             pointer-events: none;
         }
+
         .tooltip-header {
             font-weight: 600;
             border-bottom: 1px solid var(--border-color);
@@ -148,55 +176,61 @@
             text-align: center;
             color: #a78bfa;
         }
+
         .prob-row {
             display: flex;
             align-items: center;
             margin-bottom: 4px;
         }
+
         .prob-label {
             width: 35px;
             text-align: center;
             margin-right: 8px;
-            background: rgba(255,255,255,0.05);
+            background: rgba(255, 255, 255, 0.05);
             border-radius: 3px;
             padding: 2px 0;
             color: #fbbf24;
         }
+
         .prob-bar-container {
             flex-grow: 1;
-            background: rgba(0,0,0,0.5);
+            background: rgba(0, 0, 0, 0.5);
             height: 12px;
             border-radius: 6px;
             overflow: hidden;
-            border: 1px solid rgba(255,255,255,0.05);
+            border: 1px solid rgba(255, 255, 255, 0.05);
         }
+
         .prob-bar-fill {
             background: linear-gradient(90deg, #8b5cf6, #3b82f6);
             height: 100%;
             transition: width 0.1s ease-out;
             width: 0%;
         }
+
         .prob-value {
             width: 45px;
             text-align: right;
             margin-left: 8px;
-            color: rgba(255,255,255,0.8);
+            color: rgba(255, 255, 255, 0.8);
         }
     </style>
 </head>
+
 <body>
 
     <div class="controls-card">
         <input type="text" id="seed-input" value="o romeo" placeholder="Seed Text">
         <button id="set-seed-btn">Set Seed</button>
         <button id="generate-btn">Generate Next Token</button>
-        
+
         <div class="toggle-group">
             <button id="auto-gen-btn">Auto-Generate</button>
             <input type="number" id="max-tokens-input" value="200" min="1" max="1000" style="width: 50px;">
             <span style="font-size: 14px; opacity: 0.8;">Tokens</span>
         </div>
-        
+
         <div class="slider-group">
             <label for="temp-slider">Temperature:</label>
             <input type="range" id="temp-slider" min="0.0" max="10.0" step="0.1" value="1.0">
@@ -211,7 +245,7 @@
         // State variables
         let sequence = []; // Array of { char: 'A', nextLogits: [{char, logit}, ...] | null }
         let isAutoGenerating = false;
-        
+
         // DOM Elements
         const seedInput = document.getElementById('seed-input');
         const setSeedBtn = document.getElementById('set-seed-btn');
@@ -235,14 +269,14 @@
             for (let i = 0; i < logitsObjArray.length; i++) {
                 if (logitsObjArray[i].logit > maxLogit) maxLogit = logitsObjArray[i].logit;
             }
-            
+
             let sumExp = 0;
             const exps = logitsObjArray.map(item => {
                 const e = Math.exp((item.logit - maxLogit) / temp);
                 sumExp += e;
                 return { char: item.char, prob: e }; // Temporary prob stores exp
             });
-            
+
             return exps.map(item => ({
                 char: item.char,
                 prob: item.prob / sumExp
@@ -273,7 +307,7 @@
                 sequence.push({ char: text[i], nextLogits: null });
             }
             renderSequence();
-            
+
             const logitsArray = await requestLogits();
             if (logitsArray && sequence.length > 0) {
                 sequence[sequence.length - 1].nextLogits = logitsArray;
@@ -291,11 +325,11 @@
                 } else {
                     span.textContent = item.char;
                 }
-                
+
                 span.addEventListener('mouseenter', (e) => handleHoverStart(e, index));
                 span.addEventListener('mouseleave', handleHoverEnd);
                 span.addEventListener('click', () => handleRevert(index));
-                
+
                 display.appendChild(span);
             });
         }
@@ -309,11 +343,11 @@
             } else {
                 span.textContent = item.char;
             }
-            
+
             span.addEventListener('mouseenter', (e) => handleHoverStart(e, index));
             span.addEventListener('mouseleave', handleHoverEnd);
             span.addEventListener('click', () => handleRevert(index));
-            
+
             display.appendChild(span);
         }
 
@@ -347,7 +381,7 @@
 
             sequence = sequence.slice(0, index + 1);
             renderSequence();
-            
+
             if (sequence.length > 0 && !sequence[sequence.length - 1].nextLogits) {
                 const logitsArray = await requestLogits();
                 if (logitsArray) {
@@ -359,11 +393,11 @@
         function escapeHtml(unsafe) {
             if (typeof unsafe !== 'string') return unsafe;
             return unsafe
-                 .replace(/&/g, "&amp;")
-                 .replace(/</g, "&lt;")
-                 .replace(/>/g, "&gt;")
-                 .replace(/"/g, "&quot;")
-                 .replace(/'/g, "&#039;");
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
         }
 
         function formatChar(char) {
@@ -377,16 +411,16 @@
         function showTooltip(e, index, item) {
             const temp = getTemperature();
             let probs = computeSoftmax(item.nextLogits, temp);
-            
+
             // Sort descending by probability
             probs.sort((a, b) => b.prob - a.prob);
-            
+
             const prevText = sequence.slice(0, index + 1).map(s => s.char).join('');
             const displayPrevText = prevText.length > 30 ? '...' + prevText.slice(-30) : prevText;
             const headerEscaped = displayPrevText.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            
+
             let html = `<div class="tooltip-header">P( next | "${headerEscaped}" )</div>`;
-            
+
             probs.forEach(p => {
                 const pct = (p.prob * 100).toFixed(1);
                 html += `
@@ -399,28 +433,28 @@
                     </div>
                 `;
             });
-            
+
             tooltip.innerHTML = html;
             tooltip.style.display = 'block';
-            
+
             const tooltipRect = tooltip.getBoundingClientRect();
             const tokenRect = e.target.getBoundingClientRect();
             const padding = 15;
-            
+
             // Default: Place to the right of the character
             let leftPos = tokenRect.right + 15;
-            
+
             // If it hits the right edge of the screen, flip to the left side
             if (leftPos + tooltipRect.width > window.innerWidth - padding) {
                 leftPos = tokenRect.left - tooltipRect.width - 15;
             }
-            
+
             // Ensure we don't bleed off the left edge
             if (leftPos < padding) leftPos = padding;
-            
+
             // Align the top of the tooltip with the top of the character so it extends DOWNWARDS (as low as possible)
             let topPos = tokenRect.top;
-            
+
             // Safety Clamp vertical so it doesn't go off top or bottom
             if (topPos + tooltipRect.height > window.innerHeight - padding) {
                 topPos = window.innerHeight - tooltipRect.height - padding;
@@ -428,7 +462,7 @@
             if (topPos < padding) {
                 topPos = padding;
             }
-            
+
             // Handle massive tooltips (scroll fallback)
             if (tooltipRect.height > window.innerHeight - (padding * 2)) {
                 topPos = padding;
@@ -438,7 +472,7 @@
                 tooltip.style.maxHeight = 'none';
                 tooltip.style.overflowY = 'visible';
             }
-            
+
             tooltip.style.left = leftPos + 'px';
             tooltip.style.top = topPos + 'px';
         }
@@ -447,8 +481,8 @@
         async function requestLogits() {
             const currentString = sequence.map(s => s.char).join('');
             try {
-                const baseUrl = window.location.origin;
-                const res = await fetch(`${baseUrl}/get_logits`, {
+                const SERVER_URL = "{SERVER_URL}";
+                const res = await fetch(SERVER_URL + 'get_logits', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ text: currentString })
@@ -458,13 +492,13 @@
                 return data.top10;
             } catch (error) {
                 console.error("Failed to fetch logits:", error);
-                
+
                 // Pause auto-gen if server crashes
                 isAutoGenerating = false;
                 autoGenBtn.textContent = 'Auto-Generate';
                 generateBtn.disabled = false;
                 maxTokensInput.disabled = false;
-                
+
                 return null;
             }
         }
@@ -482,13 +516,13 @@
             const temp = getTemperature();
             const probs = computeSoftmax(logitsArray, temp);
             const nextChar = sample(probs);
-            
+
             const newItem = { char: nextChar, nextLogits: null };
             sequence.push(newItem);
-            
+
             // Append the token to the display specifically instead of recreating all existing tokens
             appendTokenNode(newItem, sequence.length - 1);
-            
+
             const nextLogitsArray = await requestLogits();
             if (nextLogitsArray && sequence.length > 0) {
                 sequence[sequence.length - 1].nextLogits = nextLogitsArray;
@@ -515,17 +549,17 @@
                 autoGenBtn.textContent = 'Stop Generation';
                 generateBtn.disabled = true;
                 maxTokensInput.disabled = true;
-                
+
                 const maxTokens = parseInt(maxTokensInput.value, 10) || 200;
                 let generatedCount = 0;
-                
+
                 while (isAutoGenerating && generatedCount < maxTokens) {
                     await runGenerationStep();
                     generatedCount++;
                     // Slight delay for visual rhythm
-                    await new Promise(r => setTimeout(r, 70)); 
+                    await new Promise(r => setTimeout(r, 70));
                 }
-                
+
                 isAutoGenerating = false;
                 autoGenBtn.textContent = 'Auto-Generate';
                 generateBtn.disabled = false;
@@ -539,4 +573,5 @@
 
     </script>
 </body>
+
 </html>
