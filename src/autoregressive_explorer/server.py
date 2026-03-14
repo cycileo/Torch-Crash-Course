@@ -14,7 +14,6 @@ from werkzeug.serving import make_server
 os.environ["WERKZEUG_RUN_MAIN"] = "true"
 
 def start_explorer(model, encode=None, decode=None, stoi=None, itos=None, port=54321, context_length=256):
-    print('fix try 6')
     # 1. Kill old server
     def is_port_in_use(p):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -78,27 +77,24 @@ def start_explorer(model, encode=None, decode=None, stoi=None, itos=None, port=5
     threading.Thread(target=serve, daemon=True).start()
     time.sleep(2) # Give it extra time to boot
 
-    # 3. THE COLAB FIX: Dynamic URL + Clickable Button
+    # 3. THE COLAB FIX: Dynamic URL + Minimal Link
     if 'google.colab' in sys.modules:
         from google.colab.output import eval_js
-        # Generate the secure proxy URL
+        from google.colab import output
         try:
             proxy_url = eval_js(f"google.colab.kernel.proxyPort({port})")
+            # A sleek, minimal link right above the iframe
             display(HTML(f"""
-                <div style="border: 2px solid #4c1d95; border-radius: 12px; padding: 25px; background: #fdf2ff; text-align: center; font-family: sans-serif;">
-                    <h2 style="color: #4c1d95; margin-bottom: 10px;">🚀 Transformer Explorer Ready</h2>
-                    <p style="color: #6b21a8; margin-bottom: 20px;">If the preview below doesn't load, click the button to open the explorer in a <b>new tab</b>.</p>
-                    <a href="{proxy_url}" target="_blank" style="background: #7c3aed; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px; transition: 0.3s;">Open in New Tab</a>
-                    <div style="margin-top: 30px; border-top: 1px solid #ddd; padding-top: 20px;">
-                        <p style="font-size: 12px; color: #999;">Attempting IFrame Fallback...</p>
-                    </div>
+                <div style="text-align: right; margin-bottom: 8px; font-family: sans-serif;">
+                    <a href="{proxy_url}" target="_blank" style="background: #f8fafc; color: #475569; padding: 6px 12px; border-radius: 6px; text-decoration: none; font-size: 12px; border: 1px solid #cbd5e1; transition: 0.2s;">
+                        ↗️ Open in New Tab (Fullscreen)
+                    </a>
                 </div>
             """))
-            # Still try the IFrame, but the button is your safety net
-            from google.colab import output
-            output.serve_kernel_port_as_iframe(port, height='600')
         except Exception as e:
-            print(f"Error generating Colab proxy: {e}")
+            pass
+        
+        output.serve_kernel_port_as_iframe(port, height='600')
     else:
         display(IFrame(src=f"http://localhost:{port}/", width="100%", height="600px"))
 
