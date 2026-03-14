@@ -6,15 +6,15 @@ import torch
 import logging
 import urllib.request
 import socket
+import subprocess
 from flask import Flask, request, jsonify
 from IPython.display import IFrame, display, HTML
 from werkzeug.serving import make_server
 
-# Suppress Flask logs
 os.environ["WERKZEUG_RUN_MAIN"] = "true"
 
 def start_explorer(model, encode=None, decode=None, stoi=None, itos=None, port=54321, context_length=256):
-    # 1. Kill old server
+    print('fix safari')
     def is_port_in_use(p):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             return s.connect_ex(('127.0.0.1', p)) == 0
@@ -26,7 +26,6 @@ def start_explorer(model, encode=None, decode=None, stoi=None, itos=None, port=5
             pass
         time.sleep(1)
 
-    # 2. Flask Setup
     app = Flask(__name__)
     logging.getLogger('werkzeug').setLevel(logging.ERROR)
     
@@ -37,15 +36,17 @@ def start_explorer(model, encode=None, decode=None, stoi=None, itos=None, port=5
     @app.after_request
     def add_cors(response):
         response.headers['Access-Control-Allow-Origin'] = '*'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Bypass-Tunnel-Reminder'
         return response
 
     @app.route("/")
-    def index(): return html_content
+    def index(): 
+        return html_content
 
     @app.route("/_stop")
     def stop():
-        if app.server_ref: threading.Thread(target=app.server_ref.shutdown).start()
+        if app.server_ref: 
+            threading.Thread(target=app.server_ref.shutdown).start()
         return "Shutting down"
 
     @app.route("/get_logits", methods=["POST"])
@@ -56,14 +57,17 @@ def start_explorer(model, encode=None, decode=None, stoi=None, itos=None, port=5
             tokens = encode(text) if encode else [stoi.get(c, 0) for c in text]
             max_len = getattr(model, 'block_size', context_length)
             tokens = tokens[-max_len:]
+            
             device = next(model.parameters()).device
             model.eval()
             with torch.no_grad():
                 x = torch.tensor(tokens, dtype=torch.long, device=device).unsqueeze(0)
                 logits = model(x)
                 if isinstance(logits, tuple): logits = logits[0]
+                
             last_logits = logits[0, -1, :]
             topk_vals, topk_idx = torch.topk(last_logits, 10)
+            
             chars = [decode([i.item()]) if decode else itos.get(i.item(), '?') for i in topk_idx]
             return jsonify({"top10": [{"char": c, "logit": v.item()} for c, v in zip(chars, topk_vals)]})
         except Exception as e:
@@ -75,26 +79,37 @@ def start_explorer(model, encode=None, decode=None, stoi=None, itos=None, port=5
 
     app.server_ref = None
     threading.Thread(target=serve, daemon=True).start()
-    time.sleep(2) # Give it extra time to boot
+    time.sleep(1) 
 
-    # 3. THE COLAB FIX: Dynamic URL + Minimal Link
     if 'google.colab' in sys.modules:
-        from google.colab.output import eval_js
-        from google.colab import output
-        try:
-            proxy_url = eval_js(f"google.colab.kernel.proxyPort({port})")
-            # A sleek, minimal link right above the iframe
-            display(HTML(f"""
-                <div style="text-align: right; margin-bottom: 8px; font-family: sans-serif;">
-                    <a href="{proxy_url}" target="_blank" style="background: #f8fafc; color: #475569; padding: 6px 12px; border-radius: 6px; text-decoration: none; font-size: 12px; border: 1px solid #cbd5e1; transition: 0.2s;">
-                        ↗️ Open in New Tab (Fullscreen)
-                    </a>
-                </div>
-            """))
-        except Exception as e:
-            pass
+        print("Starting LocalTunnel to bypass Safari browser security...")
         
-        output.serve_kernel_port_as_iframe(port, height='600')
+        lt_process = subprocess.Popen(
+            ['npx', 'localtunnel', '--port', str(port)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        
+        lt_url = ""
+        while True:
+            line = lt_process.stdout.readline()
+            if "your url is:" in line:
+                lt_url = line.split("your url is:")[1].strip()
+                break
+                
+        display(HTML(f"""
+            <div style="border: 2px solid #4c1d95; border-radius: 12px; padding: 25px; background: #fdf2ff; text-align: center; font-family: sans-serif;">
+                <h2 style="color: #4c1d95; margin-bottom: 10px;">🚀 Transformer Explorer Ready</h2>
+                <p style="color: #6b21a8; margin-bottom: 20px;">This public link bypasses all browser security restrictions.</p>
+                <div style="margin-bottom: 15px; padding: 10px; background: #fff; border-radius: 6px; font-size: 14px; color: #333;">
+                    <b>Important:</b> When the new tab opens, click the blue <b>"Click to Continue"</b> button.
+                </div>
+                <a href="{lt_url}" target="_blank" style="background: #7c3aed; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px; transition: 0.3s;">
+                    Open Explorer (Universal)
+                </a>
+            </div>
+        """))
     else:
         display(IFrame(src=f"http://localhost:{port}/", width="100%", height="600px"))
 

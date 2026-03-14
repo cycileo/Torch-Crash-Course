@@ -483,7 +483,10 @@
             try {
                 const res = await fetch('get_logits', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Bypass-Tunnel-Reminder': 'true' // Required for LocalTunnel
+                    },
                     body: JSON.stringify({ text: currentString })
                 });
                 const data = await res.json();
