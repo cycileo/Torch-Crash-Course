@@ -15,6 +15,7 @@ import random
 os.environ["WERKZEUG_RUN_MAIN"] = "true"
 
 def start_explorer(model, encode=None, decode=None, stoi=None, itos=None, port=None, context_length=256):
+    print('debug 1')
     def is_port_in_use(p):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             return s.connect_ex(('127.0.0.1', p)) == 0
