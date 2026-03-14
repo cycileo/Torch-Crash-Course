@@ -14,7 +14,6 @@ from werkzeug.serving import make_server
 os.environ["WERKZEUG_RUN_MAIN"] = "true"
 
 def start_explorer(model, encode=None, decode=None, stoi=None, itos=None, port=54321, context_length=256):
-    print('fix safari')
     def is_port_in_use(p):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             return s.connect_ex(('127.0.0.1', p)) == 0
@@ -82,7 +81,23 @@ def start_explorer(model, encode=None, decode=None, stoi=None, itos=None, port=5
     time.sleep(1) 
 
     if 'google.colab' in sys.modules:
-        print("Starting LocalTunnel to bypass Safari browser security...")
+        from google.colab.output import eval_js
+        from google.colab import output
+        
+        try:
+            proxy_url = eval_js(f"google.colab.kernel.proxyPort({port})")
+        except Exception:
+            proxy_url = "#"
+        
+        try:
+            req = urllib.request.Request('https://loca.lt/mytunnelpassword')
+            req.add_header('User-Agent', 'Mozilla/5.0')
+            tunnel_password = urllib.request.urlopen(req).read().decode('utf8').strip()
+        except Exception:
+            try:
+                tunnel_password = urllib.request.urlopen('https://ipv4.icanhazip.com').read().decode('utf8').strip()
+            except:
+                tunnel_password = "Error fetching IP"
         
         lt_process = subprocess.Popen(
             ['npx', 'localtunnel', '--port', str(port)],
@@ -91,7 +106,7 @@ def start_explorer(model, encode=None, decode=None, stoi=None, itos=None, port=5
             text=True
         )
         
-        lt_url = ""
+        lt_url = "#"
         while True:
             line = lt_process.stdout.readline()
             if "your url is:" in line:
@@ -99,17 +114,21 @@ def start_explorer(model, encode=None, decode=None, stoi=None, itos=None, port=5
                 break
                 
         display(HTML(f"""
-            <div style="border: 2px solid #4c1d95; border-radius: 12px; padding: 25px; background: #fdf2ff; text-align: center; font-family: sans-serif;">
-                <h2 style="color: #4c1d95; margin-bottom: 10px;">🚀 Transformer Explorer Ready</h2>
-                <p style="color: #6b21a8; margin-bottom: 20px;">This public link bypasses all browser security restrictions.</p>
-                <div style="margin-bottom: 15px; padding: 10px; background: #fff; border-radius: 6px; font-size: 14px; color: #333;">
-                    <b>Important:</b> When the new tab opens, click the blue <b>"Click to Continue"</b> button.
+            <div style="display: flex; gap: 15px; margin-bottom: 10px; font-family: sans-serif; max-width: 800px;">
+                <div style="flex: 1; padding: 15px; border: 1px solid #cbd5e1; border-radius: 8px; background: #f8fafc;">
+                    <h4 style="margin: 0 0 8px 0; color: #0f172a; font-size: 14px;">Option 1: Standard Tab</h4>
+                    <p style="margin: 0 0 12px 0; font-size: 12px; color: #475569;">Best for Chrome. Fast and secure.</p>
+                    <a href="{proxy_url}" target="_blank" style="display: inline-block; background: #2563eb; color: white; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-size: 13px; font-weight: bold;">↗️ Open Standard</a>
                 </div>
-                <a href="{lt_url}" target="_blank" style="background: #7c3aed; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px; transition: 0.3s;">
-                    Open Explorer (Universal)
-                </a>
+                <div style="flex: 1; padding: 15px; border: 1px solid #c084fc; border-radius: 8px; background: #faf5ff;">
+                    <h4 style="margin: 0 0 8px 0; color: #4c1d95; font-size: 14px;">Option 2: Universal (Safari)</h4>
+                    <p style="margin: 0 0 12px 0; font-size: 12px; color: #6b21a8;">If Option 1 fails. Password: <code style="background: #e9d5ff; padding: 2px 6px; border-radius: 4px; color: #7e22ce; font-weight: bold;">{tunnel_password}</code></p>
+                    <a href="{lt_url}" target="_blank" style="display: inline-block; background: #9333ea; color: white; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-size: 13px; font-weight: bold;">🌐 Open Universal</a>
+                </div>
             </div>
         """))
+        
+        output.serve_kernel_port_as_iframe(port, height='600')
     else:
         display(IFrame(src=f"http://localhost:{port}/", width="100%", height="600px"))
 
