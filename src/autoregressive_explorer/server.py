@@ -7,20 +7,20 @@ import logging
 import urllib.request
 import socket
 from flask import Flask, request, jsonify
+# ALL UI imports MUST stay at the top level to avoid UnboundLocalErrors
 from IPython.display import IFrame, display, HTML
 from werkzeug.serving import make_server
 
-# Completely suppress Flask/Werkzeug logs and banners
+# Suppress Flask banners
 os.environ["WERKZEUG_RUN_MAIN"] = "true"
-cli = sys.modules.get('flask.cli', None)
-if cli is not None:
-    cli.show_server_banner = lambda *x: None
 
 def start_explorer(model, encode=None, decode=None, stoi=None, itos=None, port=54321, context_length=256):
     """
-    Starts a background Flask server and displays the Autoregressive Explorer UI in the notebook.
+    Starts a background Flask server and displays the UI.
+    Compatible with Local Jupyter and Google Colab.
     """
-    # 1. ATTEMPT TO KILL ANY EXISTING FLASK SERVER ON THIS PORT!
+    print('fic try 5')
+    # 1. Kill any existing server on this port
     def is_port_in_use(p):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             return s.connect_ex(('127.0.0.1', p)) == 0
@@ -28,137 +28,75 @@ def start_explorer(model, encode=None, decode=None, stoi=None, itos=None, port=5
     if is_port_in_use(port):
         try:
             urllib.request.urlopen(f"http://127.0.0.1:{port}/_stop", timeout=1)
-        except Exception:
+        except:
             pass
-        
-        # Wait for port to actually free up
-        for _ in range(10):
-            if not is_port_in_use(port):
-                break
-            time.sleep(0.5)
+        time.sleep(1)
 
-    # 2. Initialize fresh Flask app
+    # 2. Flask App Setup
     app = Flask(__name__)
-    app.logger.disabled = True
-    logging.getLogger('werkzeug').disabled = True
+    logging.getLogger('werkzeug').setLevel(logging.ERROR)
     
-    # Read the HTML content
     html_path = os.path.join(os.path.dirname(__file__), 'index.html')
     with open(html_path, 'r', encoding='utf-8') as f:
         html_content = f.read()
 
     @app.after_request
-    def after_request(response):
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-        response.headers.add('Access-Control-Allow-Methods', 'OPTIONS,POST,GET')
+    def add_cors(response):
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
         return response
 
     @app.route("/")
-    def index():
+    def index(): 
         return html_content
-
-    # We store the werkzeug server reference here so the endpoint can access it
-    app.server_ref = None
 
     @app.route("/_stop")
     def stop():
-        if app.server_ref is not None:
-            threading.Thread(target=app.server_ref.shutdown, daemon=True).start()
+        if app.server_ref: 
+            threading.Thread(target=app.server_ref.shutdown).start()
         return "Shutting down"
 
-    @app.route("/get_logits", methods=["POST", "OPTIONS"])
+    @app.route("/get_logits", methods=["POST"])
     def get_logits():
-        if request.method == "OPTIONS":
-            return jsonify({}), 200
-
         data = request.json
-        text = data.get("text", "")
-        
+        text = data.get("text", "").lower()
         try:
-            # 1. Tokenize string -> indices
-            if encode is not None:
-                encoded = encode(text)
-            elif stoi is not None:
-                encoded = [stoi.get(c, 0) for c in text]
-            else:
-                raise ValueError("No tokenizer found. Please provide an `encode` function or `stoi` dict.")
-
-            # Prioritize the model's explicit block_size if it exists, otherwise use fallback context_length
-            if hasattr(model, 'block_size'):
-                max_len = model.block_size
-            else:
-                max_len = context_length
-                
-            encoded = encoded[-max_len:]
-
-            # 2. Model Device Check
-            device = next(model.parameters()).device
+            tokens = encode(text) if encode else [stoi.get(c, 0) for c in text]
+            max_len = getattr(model, 'block_size', context_length)
+            tokens = tokens[-max_len:]
             
-            # 3. Forward Pass 
+            device = next(model.parameters()).device
             model.eval()
             with torch.no_grad():
-                x = torch.tensor(encoded, dtype=torch.long, device=device).unsqueeze(0)  # Shape (1, T)
-                preds = model(x)
-                logits = preds[0] if isinstance(preds, tuple) else preds 
+                x = torch.tensor(tokens, dtype=torch.long, device=device).unsqueeze(0)
+                logits = model(x)
+                if isinstance(logits, tuple): logits = logits[0]
                 
-            # 4. Extract raw T=1.0 logits for ONLY the very last token
-            last_token_logits = logits[0, -1, :] # Shape: (vocab_size,)
+            last_logits = logits[0, -1, :]
+            topk_vals, topk_idx = torch.topk(last_logits, 10)
             
-            # 5. Extract Top 10 indices and values
-            topk_logits, topk_indices = torch.topk(last_token_logits, 10)
-            
-            topk_logits = topk_logits.cpu().tolist()
-            topk_indices = topk_indices.cpu().tolist()
-            
-            # 6. Decode indices -> string characters
-            chars = []
-            if decode is not None:
-                chars = [decode([idx]) for idx in topk_indices]
-            elif itos is not None:
-                chars = [itos.get(idx, '?') for idx in topk_indices]
-            else:
-                chars = [chr(idx) for idx in topk_indices] # ASCII fallback
-
-            # 7. Return formatted payload
-            top10_payload = [{"char": c, "logit": l} for c, l in zip(chars, topk_logits)]
-            return jsonify({"top10": top10_payload})
-            
+            chars = [decode([i.item()]) if decode else itos.get(i.item(), '?') for i in topk_idx]
+            return jsonify({"top10": [{"char": c, "logit": v.item()} for c, v in zip(chars, topk_vals)]})
         except Exception as e:
-            import traceback
-            traceback.print_exc()
             return jsonify({"error": str(e)}), 500
 
-    def serve_app():
-        srv = make_server('0.0.0.0', port, app)
-        app.server_ref = srv
-        srv.serve_forever()
+    # 3. Server Threading
+    def serve():
+        app.server_ref = make_server('0.0.0.0', port, app)
+        app.server_ref.serve_forever()
 
-    # Start server in daemonized thread
-    server_thread = threading.Thread(target=serve_app, daemon=True)
-    server_thread.start()
-    
-    time.sleep(1) # Let server boot
+    app.server_ref = None
+    threading.Thread(target=serve, daemon=True).start()
+    time.sleep(1) # Wait for server boot
 
-    # FIX: Bypass Colab's iframe blocking by opening in a new tab!
+    # 4. Environment-Aware Display
     if 'google.colab' in sys.modules:
-        from google.colab.output import eval_js
-        
-        # Get the secure Colab proxy URL
-        colab_url = eval_js(f"google.colab.kernel.proxyPort({port})")
-        
-        # Display a nice UI box with a clickable link
-        display(HTML(f"""
-        <div style="padding: 20px; background-color: #f8fafc; border-radius: 8px; border: 1px solid #cbd5e1; text-align: center; font-family: sans-serif;">
-            <h3 style="margin-top: 0; color: #1e293b;">Server Running on Port {port}</h3>
-            <p style="color: #475569; margin-bottom: 15px;">Google Colab iframes are often blocked by browser security settings. Click below to open the UI.</p>
-            <a href="{colab_url}" target="_blank" style="background-color: #4c1d95; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block; transition: background-color 0.2s;">
-                🚀 Open Explorer in New Tab
-            </a>
-        </div>
-        """))
+        from google.colab import output
+        print(f"Colab detected. Serving UI on proxy port {port}...")
+        # This utility handles the proxying and security headers automatically
+        output.serve_kernel_port_as_iframe(port, height='600')
     else:
-        # Standard local Jupyter rendering
+        print(f"Local environment detected. Opening localhost:{port}")
         display(IFrame(src=f"http://localhost:{port}/", width="100%", height="600px"))
 
-    return server_thread
+    return app.server_ref
