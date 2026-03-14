@@ -13,21 +13,35 @@ from werkzeug.serving import make_server
 
 os.environ["WERKZEUG_RUN_MAIN"] = "true"
 
-def start_explorer(model, encode=None, decode=None, stoi=None, itos=None, port=54321, context_length=256):
+ef start_explorer(model, encode=None, decode=None, stoi=None, itos=None, port=None, context_length=256):
     def is_port_in_use(p):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             return s.connect_ex(('127.0.0.1', p)) == 0
 
-    if is_port_in_use(port):
-        try:
-            urllib.request.urlopen(f"http://127.0.0.1:{port}/_stop", timeout=1)
-        except Exception:
-            pass
-        
-        for _ in range(10):
-            if not is_port_in_use(port):
-                break
-            time.sleep(0.5)
+    # 1. If a specific port was requested, aggressively try to clear it
+    if port is not None:
+        if is_port_in_use(port):
+            try:
+                urllib.request.urlopen(f"http://127.0.0.1:{port}/_stop", timeout=1)
+            except Exception:
+                pass
+            
+            # Robust polling loop to wait for it to actually die
+            for _ in range(10):
+                if not is_port_in_use(port):
+                    break
+                time.sleep(0.5)
+                
+            # If it is STILL locked, force fallback to random
+            if is_port_in_use(port):
+                print(f"Port {port} is stubbornly locked. Switching to a random port.")
+                port = None
+
+    # 2. If port is None (default or fallback), find a guaranteed free random port
+    if port is None:
+        port = random.randint(10240, 65535)
+        while is_port_in_use(port):
+            port = random.randint(10240, 65535)
 
     app = Flask(__name__)
     logging.getLogger('werkzeug').setLevel(logging.ERROR)
