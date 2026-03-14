@@ -298,19 +298,46 @@
             tempVal.textContent = parseFloat(e.target.value).toFixed(1);
         });
 
+        async function requestAllLogits(currentString) {
+            try {
+                const res = await fetch('get_logits', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: currentString, return_all: true })
+                });
+                const data = await res.json();
+                if (data.error) throw new Error(data.error);
+                return data.top10_all;
+            } catch (error) {
+                console.error("Failed to fetch all logits:", error);
+                return null;
+            }
+        }
+
         async function initSeed() {
             const text = seedInput.value.toLowerCase();
             seedInput.value = text;
-            if (!text) return;
             sequence = [];
+            
+            if (text.length === 0) {
+                renderSequence();
+                return;
+            }
+
             for (let i = 0; i < text.length; i++) {
                 sequence.push({ char: text[i], nextLogits: null });
             }
             renderSequence();
-
-            const logitsArray = await requestLogits();
-            if (logitsArray && sequence.length > 0) {
-                sequence[sequence.length - 1].nextLogits = logitsArray;
+            
+            const allLogits = await requestAllLogits(text);
+            if (allLogits && allLogits.length > 0) {
+                const offset = sequence.length - allLogits.length;
+                for (let i = 0; i < allLogits.length; i++) {
+                    const seqIndex = i + offset;
+                    if (seqIndex >= 0 && sequence[seqIndex]) {
+                        sequence[seqIndex].nextLogits = allLogits[i];
+                    }
+                }
             }
         }
 

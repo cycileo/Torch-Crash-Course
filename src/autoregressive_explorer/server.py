@@ -14,7 +14,7 @@ from werkzeug.serving import make_server
 os.environ["WERKZEUG_RUN_MAIN"] = "true"
 
 def start_explorer(model, encode=None, decode=None, stoi=None, itos=None, port=None, context_length=256):
-    print('debug 2')
+    # print('debug')
     def is_port_in_use(p):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             return s.connect_ex(('127.0.0.1', p)) == 0
@@ -67,8 +67,11 @@ def start_explorer(model, encode=None, decode=None, stoi=None, itos=None, port=N
 
         data = request.json
         text = data.get("text", "").lower()
+        return_all = data.get("return_all", False)
         try:
             tokens = encode(text) if encode else [stoi.get(c, 0) for c in text]
+            if len(tokens) == 0:
+                tokens = [0]
             max_len = getattr(model, 'block_size', context_length)
             tokens = tokens[-max_len:]
             
@@ -79,11 +82,17 @@ def start_explorer(model, encode=None, decode=None, stoi=None, itos=None, port=N
                 logits = model(x)
                 if isinstance(logits, tuple): logits = logits[0]
                 
+            def get_top10(logits_1d):
+                topk_vals, topk_idx = torch.topk(logits_1d, 10)
+                chars = [decode([i.item()]) if decode else itos.get(i.item(), '?') for i in topk_idx]
+                return [{"char": c, "logit": v.item()} for c, v in zip(chars, topk_vals)]
+
+            if return_all:
+                all_payloads = [get_top10(logits[0, t, :]) for t in range(logits.size(1))]
+                return jsonify({"top10_all": all_payloads})
+                
             last_logits = logits[0, -1, :]
-            topk_vals, topk_idx = torch.topk(last_logits, 10)
-            
-            chars = [decode([i.item()]) if decode else itos.get(i.item(), '?') for i in topk_idx]
-            return jsonify({"top10": [{"char": c, "logit": v.item()} for c, v in zip(chars, topk_vals)]})
+            return jsonify({"top10": get_top10(last_logits)})
         except Exception as e:
             return jsonify({"error": str(e)}), 500
 
