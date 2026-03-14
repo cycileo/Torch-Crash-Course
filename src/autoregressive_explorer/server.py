@@ -21,9 +21,13 @@ def start_explorer(model, encode=None, decode=None, stoi=None, itos=None, port=5
     if is_port_in_use(port):
         try:
             urllib.request.urlopen(f"http://127.0.0.1:{port}/_stop", timeout=1)
-        except:
+        except Exception:
             pass
-        time.sleep(1)
+        
+        for _ in range(10):
+            if not is_port_in_use(port):
+                break
+            time.sleep(0.5)
 
     app = Flask(__name__)
     logging.getLogger('werkzeug').setLevel(logging.ERROR)
