@@ -67,10 +67,15 @@ def start_explorer(model, encode=None, decode=None, stoi=None, itos=None, port=N
             threading.Thread(target=app.server_ref.shutdown).start()
         return "Shutting down"
 
-    @app.route("/get_logits", methods=["POST"])
+    @app.route("/get_logits", methods=["POST", "OPTIONS"])
     def get_logits():
+        # FIX: Catch the CORS preflight request triggered by our custom header
+        if request.method == "OPTIONS":
+            return jsonify({}), 200
+
         data = request.json
         text = data.get("text", "").lower()
+        
         try:
             tokens = encode(text) if encode else [stoi.get(c, 0) for c in text]
             max_len = getattr(model, 'block_size', context_length)
