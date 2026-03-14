@@ -481,8 +481,9 @@
         async function requestLogits() {
             const currentString = sequence.map(s => s.char).join('');
             try {
-                const SERVER_URL = "{SERVER_URL}";
-                const res = await fetch(SERVER_URL + 'get_logits', {
+                // FIX: Use a relative path. The browser will automatically resolve this
+                // to either localhost or the Colab proxy URL!
+                const res = await fetch('/get_logits', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ text: currentString })
