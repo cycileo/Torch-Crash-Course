@@ -10,3 +10,7 @@ wheels/
 .venv
 
 .DS_Store
+
+/lightning_logs
+
+/data.zip
