@@ -10,10 +10,11 @@ import subprocess
 from flask import Flask, request, jsonify
 from IPython.display import IFrame, display, HTML
 from werkzeug.serving import make_server
+import random
 
 os.environ["WERKZEUG_RUN_MAIN"] = "true"
 
-ef start_explorer(model, encode=None, decode=None, stoi=None, itos=None, port=None, context_length=256):
+def start_explorer(model, encode=None, decode=None, stoi=None, itos=None, port=None, context_length=256):
     def is_port_in_use(p):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             return s.connect_ex(('127.0.0.1', p)) == 0
