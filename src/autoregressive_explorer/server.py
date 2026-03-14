@@ -7,7 +7,7 @@ import logging
 import urllib.request
 import socket
 from flask import Flask, request, jsonify
-from IPython.display import IFrame, display
+from IPython.display import IFrame, display, HTML
 from werkzeug.serving import make_server
 
 # Completely suppress Flask/Werkzeug logs and banners
@@ -140,11 +140,25 @@ def start_explorer(model, encode=None, decode=None, stoi=None, itos=None, port=5
     
     time.sleep(1) # Let server boot
 
-    # FIX: Display safely handling both Colab and Local
+    # FIX: Bypass Colab's iframe blocking by opening in a new tab!
     if 'google.colab' in sys.modules:
-        from google.colab import output
-        output.serve_kernel_port_as_iframe(port, height="450")
+        from google.colab.output import eval_js
+        
+        # Get the secure Colab proxy URL
+        colab_url = eval_js(f"google.colab.kernel.proxyPort({port})")
+        
+        # Display a nice UI box with a clickable link
+        display(HTML(f"""
+        <div style="padding: 20px; background-color: #f8fafc; border-radius: 8px; border: 1px solid #cbd5e1; text-align: center; font-family: sans-serif;">
+            <h3 style="margin-top: 0; color: #1e293b;">Server Running on Port {port}</h3>
+            <p style="color: #475569; margin-bottom: 15px;">Google Colab iframes are often blocked by browser security settings. Click below to open the UI.</p>
+            <a href="{colab_url}" target="_blank" style="background-color: #4c1d95; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block; transition: background-color 0.2s;">
+                🚀 Open Explorer in New Tab
+            </a>
+        </div>
+        """))
     else:
-        display(IFrame(src=f"http://localhost:{port}/", width="100%", height="450px"))
+        # Standard local Jupyter rendering
+        display(IFrame(src=f"http://localhost:{port}/", width="100%", height="600px"))
 
     return server_thread
