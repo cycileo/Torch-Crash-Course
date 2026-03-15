@@ -13,7 +13,41 @@ from werkzeug.serving import make_server
 
 os.environ["WERKZEUG_RUN_MAIN"] = "true"
 
-def start_explorer(model, encode=None, decode=None, stoi=None, itos=None, port=None, context_length=256):
+def start_explorer(model=None, encode=None, decode=None, stoi=None, itos=None, port=None, context_length=256):
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    assets_dir = os.path.join(base_dir, 'assets')
+    chars_path = os.path.join(assets_dir, 'chars.json')
+    model_path = os.path.join(assets_dir, 'minigpt_weights.pth')
+
+    # Load chars if encode/decode or stoi/itos are missing, OR if model needs to be loaded (to get vocab_size)
+    if (encode is None and stoi is None) or (decode is None and itos is None) or (model is None):
+        import json
+        if not os.path.exists(chars_path):
+            raise FileNotFoundError(f"Missing {chars_path}. Please provide encode/decode or stoi/itos and/or save chars in 'assets/' first.")
+        with open(chars_path, 'r', encoding='utf-8') as f:
+            chars = json.load(f)
+
+        if encode is None and stoi is None: 
+            stoi = { ch:i for i,ch in enumerate(chars) }
+        if decode is None and itos is None: 
+            itos = { i:ch for i,ch in enumerate(chars) }
+
+    # Auto-load logic if model isn't provided
+    if model is None:
+        from .model import MiniGPT
+        
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"Missing {model_path}. Please provide a model, or save weights in 'assets/' first.")
+            
+        device = torch.device('mps' if torch.backends.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu')
+        loaded_data = torch.load(model_path, map_location=device, weights_only=True)
+        
+        model = MiniGPT(vocab_size=len(chars), block_size=64)
+        model.load_state_dict(loaded_data)
+            
+        model.to(device)
+        model.eval()
+
     # print('debug')
     def is_port_in_use(p):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
