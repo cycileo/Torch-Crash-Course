@@ -135,6 +135,9 @@ def start_explorer(model=None, encode=None, decode=None, stoi=None, itos=None,
 
         data = request.json
         text = data.get("text", "")
+        temp = data.get("temperature", 1.0)
+        top_k = data.get("top_k", 10)
+        sample_from_top_k = data.get("sample_from_top_k", False)
         return_all = data.get("return_all", False)
         try:
             tokens = encode(text)
@@ -152,22 +155,44 @@ def start_explorer(model=None, encode=None, decode=None, stoi=None, itos=None,
                 elif hasattr(logits, 'logits'):
                     logits = logits.logits
                 
-            def get_top10(logits_1d):
-                topk_vals, topk_idx = torch.topk(logits_1d, 10)
-                chars = [decode([i.item()]) for i in topk_idx]
-                return [{"char": c, "logit": v.item()} for c, v in zip(chars, topk_vals)]
+            def process_logits(logits_1d, t):
+                # Apply top-k filtering for sampling ONLY if requested
+                if sample_from_top_k:
+                    v, _ = torch.topk(logits_1d, min(top_k, logits_1d.size(-1)))
+                    logits_1d[logits_1d < v[..., [-1]]] = -float('Inf')
+
+                # Handle greedy sampling separately
+                if t <= 1e-6:
+                    probs = torch.softmax(logits_1d * 1e6, dim=-1) # Focus on max
+                else:
+                    probs = torch.softmax(logits_1d / t, dim=-1)
+                
+                # Sample from (possibly truncated) distribution
+                sampled_idx = torch.multinomial(probs, 1).item()
+                sampled_char = decode([sampled_idx])
+                
+                # Extract Top K for visualization
+                # Note: we use top_k to control display, regardless of sampling strategy
+                tk_probs, tk_idx = torch.topk(probs, min(top_k, probs.size(-1)))
+                top10 = [{"char": decode([i.item()]), "prob": p.item()} for p, i in zip(tk_probs, tk_idx)]
+                return top10, sampled_char
 
             if return_all:
-                all_payloads = [get_top10(logits[0, t, :]) for t in range(logits.size(1))]
+                res_list = [process_logits(logits[0, t, :], temp) for t in range(logits.size(1))]
+                payloads = [r[0] for r in res_list]
                 # Return decoded strings for each token (excluding BOS) so frontend can show them correctly
                 token_strings = [decode([t]) for t in tokens[1:]]
                 return jsonify({
-                    "top10_all": all_payloads,
+                    "top10_all": payloads,
                     "tokens": token_strings
                 })
 
             last_logits = logits[0, -1, :]
-            return jsonify({"top10": get_top10(last_logits)})
+            top10, sampled_char = process_logits(last_logits, temp)
+            return jsonify({
+                "top10": top10, 
+                "sampled_char": sampled_char
+            })
         except Exception as e:
             import traceback
             return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
