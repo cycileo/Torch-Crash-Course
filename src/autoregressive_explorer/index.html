@@ -413,9 +413,9 @@
             });
         }
 
-        function appendTokenNode(item, index) {
+        function appendTokenNode(item, index, shouldFlash = true) {
             const span = document.createElement('span');
-            span.className = 'token flash-new';
+            span.className = shouldFlash ? 'token flash-new' : 'token';
             if (item.char === '\n' || item.char === '\\n') {
                 span.textContent = '↵';
                 span.classList.add('token-newline');
@@ -590,7 +590,7 @@
             }
         }
 
-        async function runGenerationStep() {
+        async function runGenerationStep(shouldFlash = true) {
             let logitsArray = sequence.length > 0 ? sequence[sequence.length - 1].nextLogits : null;
             if (!logitsArray) {
                 logitsArray = await requestLogits();
@@ -608,7 +608,7 @@
             sequence.push(newItem);
 
             // Append the token to the display specifically instead of recreating all existing tokens
-            appendTokenNode(newItem, sequence.length - 1);
+            appendTokenNode(newItem, sequence.length - 1, shouldFlash);
 
             const nextLogitsArray = await requestLogits();
             if (nextLogitsArray && sequence.length > 0) {
@@ -641,7 +641,7 @@
                 let generatedCount = 0;
 
                 while (isAutoGenerating && generatedCount < maxTokens) {
-                    await runGenerationStep();
+                    await runGenerationStep(false);
                     generatedCount++;
                     // Slight delay for visual rhythm
                     await new Promise(r => setTimeout(r, 70));
