@@ -173,7 +173,8 @@
             z-index: 1000;
             font-family: "JetBrains Mono", Consolas, Menlo, monospace;
             font-size: 12px;
-            min-width: 220px;
+            min-width: 260px;
+            max-width: 380px;
             pointer-events: none;
         }
 
@@ -193,13 +194,17 @@
         }
 
         .prob-label {
-            width: 35px;
-            text-align: center;
+            width: {{LABEL_WIDTH}};
+            text-align: right;
             margin-right: 8px;
             background: rgba(255, 255, 255, 0.05);
             border-radius: 3px;
-            padding: 2px 0;
+            padding: 2px 5px;
             color: #fbbf24;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex-shrink: 0;
         }
 
         .prob-bar-container {
@@ -486,9 +491,10 @@
 
             probs.forEach(p => {
                 const pct = (p.prob * 100).toFixed(1);
+                const label = formatChar(p.char);
                 html += `
                     <div class="prob-row">
-                        <div class="prob-label">${formatChar(p.char)}</div>
+                        <div class="prob-label" title="${escapeHtml(p.char)}">${label}</div>
                         <div class="prob-bar-container">
                             <div class="prob-bar-fill" style="width: ${pct}%"></div>
                         </div>

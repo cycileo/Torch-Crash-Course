@@ -55,15 +55,18 @@ def start_explorer(model=None, encode=None, decode=None, stoi=None, itos=None,
         if resolved == 'minigpt':
             model, encode, decode, bos_token = load_minigpt(assets_dir, device)
             default_seed = 'o romeo'
+            label_width = '35px'
         else:
             model, encode, decode, bos_token = load_hf_model(resolved, device)
             default_seed = 'Once upon a time'
+            label_width = '85px'
     else:
         # User passed their own model — ensure it is on the right device
         model.to(device)
         model.eval()
         bos_token = 0  # sensible default for custom models
         default_seed = 'o romeo'  # custom models assumed to be MiniGPT-like
+        label_width = '35px'
         # If no vocabulary handlers provided, fall back to the MiniGPT chars from assets/
         if encode is None and stoi is None and decode is None and itos is None:
             from .backends import load_minigpt
@@ -107,7 +110,7 @@ def start_explorer(model=None, encode=None, decode=None, stoi=None, itos=None,
     
     html_path = os.path.join(os.path.dirname(__file__), 'index.html')
     with open(html_path, 'r', encoding='utf-8') as f:
-        html_content = f.read().replace('{{DEFAULT_SEED}}', default_seed)
+        html_content = f.read().replace('{{DEFAULT_SEED}}', default_seed).replace('{{LABEL_WIDTH}}', label_width)
 
     @app.after_request
     def add_cors(response):
