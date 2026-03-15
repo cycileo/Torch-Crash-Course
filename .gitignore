@@ -12,5 +12,6 @@ wheels/
 .DS_Store
 
 /lightning_logs
+/checkpoints
 
 /data.zip
