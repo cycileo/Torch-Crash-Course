@@ -243,7 +243,10 @@
         <div class="slider-group">
             <label for="temp-slider">Temperature:</label>
             <input type="range" id="temp-slider" min="0.0" max="10.0" step="0.1" value="1.0">
-            <span id="temp-val" style="width: 25px;">1.0</span>
+            <span id="temp-val" style="width: 30px;">1.0</span>
+            <button id="temp-reset-btn" title="Reset to 1.0" style="padding: 4px 8px; font-size: 12px;">↺</button>
+            <label style="font-size: 12px; opacity: 0.7; margin-left:4px;">Max:</label>
+            <input type="number" id="temp-max-input" min="0" step="1" value="10" style="width: 45px;">
         </div>
     </div>
 
@@ -263,14 +266,35 @@
         const maxTokensInput = document.getElementById('max-tokens-input');
         const tempSlider = document.getElementById('temp-slider');
         const tempVal = document.getElementById('temp-val');
+        const tempResetBtn = document.getElementById('temp-reset-btn');
+        const tempMaxInput = document.getElementById('temp-max-input');
         const display = document.getElementById('sequence-display');
         const tooltip = document.getElementById('tooltip');
 
-        // Math utilities
         function getTemperature() {
             const t = parseFloat(tempSlider.value);
-            return t === 0.0 ? 1e-9 : t;
+            return (isNaN(t) || t === 0) ? 1e-9 : t;
         }
+
+        tempSlider.addEventListener('input', () => {
+            tempVal.textContent = parseFloat(tempSlider.value).toFixed(1);
+        });
+
+        tempResetBtn.addEventListener('click', () => {
+            tempSlider.value = 1.0;
+            tempVal.textContent = '1.0';
+        });
+
+        tempMaxInput.addEventListener('change', () => {
+            let max = parseFloat(tempMaxInput.value);
+            if (isNaN(max) || max < 0) { max = 0; tempMaxInput.value = 0; }
+            tempSlider.max = max;
+            // Clamp current value if it exceeds new max
+            if (parseFloat(tempSlider.value) > max) {
+                tempSlider.value = max;
+                tempVal.textContent = max.toFixed(1);
+            }
+        });
 
         function computeSoftmax(logitsObjArray, temp) {
             // Find max for numerical stability
@@ -324,8 +348,7 @@
         }
 
         async function initSeed() {
-            const text = seedInput.value.toLowerCase();
-            seedInput.value = text;
+            const text = seedInput.value;
             sequence = [];
             
             // Unconditional start marker
@@ -438,11 +461,14 @@
         }
 
         function formatChar(char) {
-            if (char === ' ') return '[]';
-            if (char === '\n' || char === '\\n') return '\\n';
-            if (char === '\t' || char === '\\t') return '\\t';
-            if (char === '\r') return '\\r';
-            return escapeHtml(char);
+            if (char === '') return '∅';
+            // Normalize whitespace-only tokens for readability
+            if (char === ' ') return '·';
+            if (/^ +$/.test(char)) return '·'.repeat(char.length);
+            // Escape and replace internal newlines/tabs for display
+            let display = escapeHtml(char);
+            display = display.replace(/\n/g, '↵').replace(/\t/g, '→');
+            return display;
         }
 
         function showTooltip(e, index, item) {

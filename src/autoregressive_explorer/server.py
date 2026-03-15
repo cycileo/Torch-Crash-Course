@@ -13,7 +13,8 @@ from werkzeug.serving import make_server
 
 os.environ["WERKZEUG_RUN_MAIN"] = "true"
 
-def start_explorer(model=None, encode=None, decode=None, stoi=None, itos=None, port=None, context_length=256):
+def start_explorer(model=None, encode=None, decode=None, stoi=None, itos=None,
+                   backend='minigpt', port=None, context_length=256):
     """
     Launches an interactive web-based visualization tool for exploring the autoregressive 
     predictions of a language model.
@@ -22,16 +23,19 @@ def start_explorer(model=None, encode=None, decode=None, stoi=None, itos=None, p
     token probabilities, top-k predictions, and conditional distributions.
     
     Parameters:
-    model (nn.Module, optional): A trained PyTorch model. If None, the function attempts 
-        to load a pre-trained model and weights from the 'assets/' directory. 
-        Pass your own model instance to test local training results.
+    model (nn.Module, optional): A trained PyTorch model to use directly.
+        If None, one is loaded according to the 'backend' argument.
     encode (callable, optional): A text-to-integers encoder function.
     decode (callable, optional): An integers-to-text decoder function.
     stoi (dict, optional): A string-to-index mapping dictionary.
     itos (dict, optional): An index-to-string mapping dictionary.
         Note: You can provide custom vocabulary handlers (encode/decode or stoi/itos) 
         to experiment with different tokenization strategies. If omitted, they are 
-        automatically generated from 'assets/chars.json'.
+        automatically generated based on the selected backend.
+    backend (str, optional): Which model to load when 'model' is None. Options:
+        - 'minigpt' (default): loads the pre-trained MiniGPT from assets/.
+        - 'qwen': loads Qwen3-0.6B from HuggingFace.
+        - Any HuggingFace model ID string, e.g. 'gpt2'.
     port (int, optional): The network port for the explorer server. If None, a random 
         free port is chosen.
     context_length (int, optional): The maximum number of tokens to feed into the model. 
@@ -42,44 +46,35 @@ def start_explorer(model=None, encode=None, decode=None, stoi=None, itos=None, p
     """
     base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     assets_dir = os.path.join(base_dir, 'assets')
-    chars_path = os.path.join(assets_dir, 'chars.json')
-    model_path = os.path.join(assets_dir, 'minigpt_weights.pth')
-
-    # Load chars if encode/decode or stoi/itos are missing, OR if model needs to be loaded (to get vocab_size)
-    if (encode is None and stoi is None) or (decode is None and itos is None) or (model is None):
-        import json
-        if not os.path.exists(chars_path):
-            raise FileNotFoundError(f"Missing {chars_path}. Please provide encode/decode or stoi/itos and/or save chars in 'assets/' first.")
-        with open(chars_path, 'r', encoding='utf-8') as f:
-            chars = json.load(f)
-
-        if encode is None and stoi is None: 
-            stoi = { ch:i for i,ch in enumerate(chars) }
-        if decode is None and itos is None: 
-            itos = { i:ch for i,ch in enumerate(chars) }
-
-    # Generate default encode/decode functions if missing to keep the main loop fast
-    if encode is None: 
-        encode = lambda s: [stoi.get(c, 0) for c in s]
-    if decode is None: 
-        decode = lambda l: ''.join([itos.get(i, '?') for i in l])
-
     device = torch.device('mps' if torch.backends.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu')
 
-    # Auto-load logic if model isn't provided
+    # If model is not provided, delegate loading to backends
     if model is None:
-        from .model import MiniGPT
-        
-        if not os.path.exists(model_path):
-            raise FileNotFoundError(f"Missing {model_path}. Please provide a model, or save weights in 'assets/' first.")
-            
-        loaded_data = torch.load(model_path, map_location=device, weights_only=True)
-        
-        model = MiniGPT(vocab_size=len(chars), block_size=64)
-        model.load_state_dict(loaded_data)
-        
-    model.to(device)
-    model.eval()
+        from .backends import load_minigpt, load_hf_model, HF_ALIASES
+        resolved = HF_ALIASES.get(backend, backend)
+        if resolved == 'minigpt':
+            model, encode, decode, bos_token = load_minigpt(assets_dir, device)
+        else:
+            model, encode, decode, bos_token = load_hf_model(resolved, device)
+    else:
+        # User passed their own model — ensure it is on the right device
+        model.to(device)
+        model.eval()
+        bos_token = 0  # sensible default for custom models
+        # If no vocabulary handlers provided, fall back to the MiniGPT chars from assets/
+        if encode is None and stoi is None and decode is None and itos is None:
+            from .backends import load_minigpt
+            _, encode, decode, bos_token = load_minigpt(assets_dir, device)
+        else:
+            # Build encode/decode from stoi/itos if only one side is missing
+            if encode is None:
+                if stoi is None:
+                    raise ValueError("Please provide 'encode' or 'stoi' when passing a custom model.")
+                encode = lambda s: [stoi.get(c, 0) for c in s]
+            if decode is None:
+                if itos is None:
+                    raise ValueError("Please provide 'decode' or 'itos' when passing a custom model.")
+                decode = lambda l: ''.join([itos.get(i, '?') for i in l])
 
     # print('debug')
     def is_port_in_use(p):
@@ -133,19 +128,23 @@ def start_explorer(model=None, encode=None, decode=None, stoi=None, itos=None, p
             return jsonify({}), 200
 
         data = request.json
-        text = data.get("text", "").lower()
+        text = data.get("text", "")
         return_all = data.get("return_all", False)
         try:
             tokens = encode(text)
-            # Always prepend [0] (pad/BOS token) to get the unconditional probability for the first char
-            tokens = [0] + tokens
-            max_len = getattr(model, 'block_size', context_length)
+            # Always prepend the BOS token to get unconditional probability for the first char
+            tokens = [bos_token] + tokens
+            max_len = getattr(model, 'block_size', getattr(getattr(model, 'config', None), 'max_position_embeddings', context_length))
             tokens = tokens[-max_len:]
             
             with torch.no_grad():
                 x = torch.tensor(tokens, dtype=torch.long, device=device).unsqueeze(0)
                 logits = model(x)
-                if isinstance(logits, tuple): logits = logits[0]
+                # Unpack: raw tensor, tuple, or HuggingFace model output object
+                if isinstance(logits, tuple):
+                    logits = logits[0]
+                elif hasattr(logits, 'logits'):
+                    logits = logits.logits
                 
             def get_top10(logits_1d):
                 topk_vals, topk_idx = torch.topk(logits_1d, 10)
@@ -159,7 +158,8 @@ def start_explorer(model=None, encode=None, decode=None, stoi=None, itos=None, p
             last_logits = logits[0, -1, :]
             return jsonify({"top10": get_top10(last_logits)})
         except Exception as e:
-            return jsonify({"error": str(e)}), 500
+            import traceback
+            return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
 
     def serve():
         app.server_ref = make_server('0.0.0.0', port, app)
