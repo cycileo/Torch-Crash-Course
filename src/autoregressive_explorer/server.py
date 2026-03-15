@@ -14,6 +14,32 @@ from werkzeug.serving import make_server
 os.environ["WERKZEUG_RUN_MAIN"] = "true"
 
 def start_explorer(model=None, encode=None, decode=None, stoi=None, itos=None, port=None, context_length=256):
+    """
+    Launches an interactive web-based visualization tool for exploring the autoregressive 
+    predictions of a language model.
+    
+    This function starts a background Flask server that serves a UI for analyzing 
+    token probabilities, top-k predictions, and conditional distributions.
+    
+    Parameters:
+    model (nn.Module, optional): A trained PyTorch model. If None, the function attempts 
+        to load a pre-trained model and weights from the 'assets/' directory. 
+        Pass your own model instance to test local training results.
+    encode (callable, optional): A text-to-integers encoder function.
+    decode (callable, optional): An integers-to-text decoder function.
+    stoi (dict, optional): A string-to-index mapping dictionary.
+    itos (dict, optional): An index-to-string mapping dictionary.
+        Note: You can provide custom vocabulary handlers (encode/decode or stoi/itos) 
+        to experiment with different tokenization strategies. If omitted, they are 
+        automatically generated from 'assets/chars.json'.
+    port (int, optional): The network port for the explorer server. If None, a random 
+        free port is chosen.
+    context_length (int, optional): The maximum number of tokens to feed into the model. 
+        Defaults to 256 or the model's 'block_size' attribute if found.
+
+    Returns:
+    server: A reference to the running Werkzeug server instance.
+    """
     base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     assets_dir = os.path.join(base_dir, 'assets')
     chars_path = os.path.join(assets_dir, 'chars.json')
