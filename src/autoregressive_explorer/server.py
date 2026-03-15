@@ -54,13 +54,16 @@ def start_explorer(model=None, encode=None, decode=None, stoi=None, itos=None,
         resolved = HF_ALIASES.get(backend, backend)
         if resolved == 'minigpt':
             model, encode, decode, bos_token = load_minigpt(assets_dir, device)
+            default_seed = 'o romeo'
         else:
             model, encode, decode, bos_token = load_hf_model(resolved, device)
+            default_seed = 'Once upon a time'
     else:
         # User passed their own model — ensure it is on the right device
         model.to(device)
         model.eval()
         bos_token = 0  # sensible default for custom models
+        default_seed = 'o romeo'  # custom models assumed to be MiniGPT-like
         # If no vocabulary handlers provided, fall back to the MiniGPT chars from assets/
         if encode is None and stoi is None and decode is None and itos is None:
             from .backends import load_minigpt
@@ -104,7 +107,7 @@ def start_explorer(model=None, encode=None, decode=None, stoi=None, itos=None,
     
     html_path = os.path.join(os.path.dirname(__file__), 'index.html')
     with open(html_path, 'r', encoding='utf-8') as f:
-        html_content = f.read()
+        html_content = f.read().replace('{{DEFAULT_SEED}}', default_seed)
 
     @app.after_request
     def add_cors(response):
