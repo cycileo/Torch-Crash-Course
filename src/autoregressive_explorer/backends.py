@@ -58,9 +58,8 @@ def load_hf_model(model_name, device):
         raise ImportError("The 'transformers' package is required for HuggingFace backends. "
                           "Install it with: pip install transformers")
 
-    # Suppress noisy HF warnings (no token needed for public models — this just silences the reminder)
+    # Suppress noisy HF warnings
     import logging
-    os.environ.setdefault("HF_HUB_DISABLE_IMPLICIT_TOKEN", "1")
     hf_logging.set_verbosity_error()
     logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
 
