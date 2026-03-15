@@ -21,7 +21,7 @@ class MiniGPT(L.LightningModule):
         pos_emb = self.position_embedding(torch.arange(T, device=self.device)) 
         x = tok_emb + pos_emb
         
-        mask = nn.Transformer.generate_square_subsequent_mask(T, device=idx.device)
+        mask = nn.Transformer.generate_square_subsequent_mask(T).to(self.device)
         x = self.transformer(x, mask=mask, is_causal=True)
         
         logits = self.lm_head(x) 
