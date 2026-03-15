@@ -142,17 +142,27 @@ def start_explorer(model=None, encode=None, decode=None, stoi=None, itos=None, p
                 logits = model(x)
                 if isinstance(logits, tuple): logits = logits[0]
                 
-            def get_top10(logits_1d):
-                topk_vals, topk_idx = torch.topk(logits_1d, 10)
-                chars = [decode([i.item()]) if decode else itos.get(i.item(), '?') for i in topk_idx]
-                return [{"char": c, "logit": v.item()} for c, v in zip(chars, topk_vals)]
+            def format_top10_lists(topk_vals_list, topk_idx_list):
+                chars = [decode([i]) if decode else itos.get(i, '?') for i in topk_idx_list]
+                return [{"char": c, "logit": v} for c, v in zip(chars, topk_vals_list)]
 
             if return_all:
-                all_payloads = [get_top10(logits[0, t, :]) for t in range(logits.size(1))]
-                return jsonify({"top10_all": all_payloads})
+                # Batch evaluate top-k for all sequence positions at once on the GPU
+                topk_vals, topk_idx = torch.topk(logits[0], 10, dim=-1)
+                # Convert 2D tensors to lists of lists in a single PCIe transfer
+                vals_list = topk_vals.tolist()
+                idx_list = topk_idx.tolist()
                 
+                all_payloads = [format_top10_lists(v_list, i_list) for v_list, i_list in zip(vals_list, idx_list)]
+                return jsonify({"top10_all": all_payloads})
+
             last_logits = logits[0, -1, :]
-            return jsonify({"top10": get_top10(last_logits)})
+            topk_vals, topk_idx = torch.topk(last_logits, 10, dim=-1)
+            # Fetch to CPU in bulk
+            vals_list = topk_vals.tolist()
+            idx_list = topk_idx.tolist()
+            
+            return jsonify({"top10": format_top10_lists(vals_list, idx_list)})
         except Exception as e:
             return jsonify({"error": str(e)}), 500
 
