@@ -78,7 +78,6 @@ def start_explorer(model=None, encode=None, decode=None, stoi=None, itos=None, p
         model = MiniGPT(vocab_size=len(chars), block_size=64)
         model.load_state_dict(loaded_data)
         
-    # Always move to device and eval mode
     model.to(device)
     model.eval()
 
