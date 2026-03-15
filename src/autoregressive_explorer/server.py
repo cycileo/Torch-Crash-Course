@@ -11,10 +11,16 @@ from flask import Flask, request, jsonify
 from IPython.display import IFrame, display, HTML
 from werkzeug.serving import make_server
 
+import gc
+
 os.environ["WERKZEUG_RUN_MAIN"] = "true"
 
+# Global state for resource management
+_MODEL_CACHE = {}    # { cache_key: (model, encode, decode, bos_token, default_seed, label_width) }
+_SERVER_REGISTRY = {}  # { cache_key: server }  -- tracks which server uses which model
+
 def start_explorer(model=None, encode=None, decode=None, stoi=None, itos=None,
-                   backend='minigpt', port=None, context_length=256):
+                   backend='minigpt', port=None, context_length=256, evict_others=False, use_hf_cache=False):
     """
     Launches an interactive web-based visualization tool for exploring the autoregressive 
     predictions of a language model.
@@ -40,49 +46,89 @@ def start_explorer(model=None, encode=None, decode=None, stoi=None, itos=None,
         free port is chosen.
     context_length (int, optional): The maximum number of tokens to feed into the model. 
         Defaults to 256 or the model's 'block_size' attribute if found.
+    evict_others (bool, optional): If True, evicts any other cached HF models from memory 
+        and shuts down their servers before launching. Defaults to False.
+    use_hf_cache (bool, optional): If True, enables HuggingFace's internal KV cache for 
+        faster inference at the cost of higher memory usage. Defaults to False.
 
     Returns:
     server: A reference to the running Werkzeug server instance.
     """
+    global _MODEL_CACHE, _SERVER_REGISTRY
+
     base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     assets_dir = os.path.join(base_dir, 'assets')
     device = torch.device('mps' if torch.backends.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu')
 
-    # If model is not provided, delegate loading to backends
+    # Create a unique key for caching
     if model is None:
-        from .backends import load_minigpt, load_hf_model, HF_ALIASES
-        resolved = HF_ALIASES.get(backend, backend)
-        if resolved == 'minigpt':
-            model, encode, decode, bos_token = load_minigpt(assets_dir, device)
-            default_seed = 'o romeo'
-            label_width = '35px'
-        else:
-            model, encode, decode, bos_token = load_hf_model(resolved, device)
-            default_seed = 'Once upon a time'
-            label_width = '85px'
+        from .backends import HF_ALIASES
+        cache_key = HF_ALIASES.get(backend, backend)
+        is_hf = (cache_key != 'minigpt')
     else:
-        # User passed their own model — ensure it is on the right device
-        model.to(device)
-        model.eval()
-        bos_token = 0  # sensible default for custom models
-        default_seed = 'o romeo'  # custom models assumed to be MiniGPT-like
-        label_width = '35px'
-        # If no vocabulary handlers provided, fall back to the MiniGPT chars from assets/
-        if encode is None and stoi is None and decode is None and itos is None:
-            from .backends import load_minigpt
-            _, encode, decode, bos_token = load_minigpt(assets_dir, device)
-        else:
-            # Build encode/decode from stoi/itos if only one side is missing
-            if encode is None:
-                if stoi is None:
-                    raise ValueError("Please provide 'encode' or 'stoi' when passing a custom model.")
-                encode = lambda s: [stoi.get(c, 0) for c in s]
-            if decode is None:
-                if itos is None:
-                    raise ValueError("Please provide 'decode' or 'itos' when passing a custom model.")
-                decode = lambda l: ''.join([itos.get(i, '?') for i in l])
+        cache_key = id(model)
+        is_hf = False
 
-    # print('debug')
+    # 2. Check cache
+    if cache_key in _MODEL_CACHE:
+        model, encode, decode, bos_token, default_seed, label_width = _MODEL_CACHE[cache_key]
+        model.to(device)
+    else:
+        # Evict other cached HF models if requested OR when loading a completely new HF model
+        if is_hf and evict_others:
+            hf_keys_to_evict = [k for k in _MODEL_CACHE if k not in ('minigpt',) and not isinstance(k, int) and k != cache_key]
+            for k in hf_keys_to_evict:
+                # Kill the server that was using this model before freeing the model
+                if k in _SERVER_REGISTRY:
+                    try:
+                        _SERVER_REGISTRY[k].shutdown()
+                    except Exception:
+                        pass
+                    del _SERVER_REGISTRY[k]
+                evicted_model = _MODEL_CACHE.pop(k)[0]
+                evicted_model.cpu()
+                del evicted_model
+                gc.collect()
+                if torch.backends.mps.is_available(): torch.mps.empty_cache()
+                elif torch.cuda.is_available(): torch.cuda.empty_cache()
+
+        # Load model logic (existing logic)
+        if model is None:
+            from .backends import load_minigpt, load_hf_model, HF_ALIASES
+            resolved = HF_ALIASES.get(backend, backend)
+            if resolved == 'minigpt':
+                model, encode, decode, bos_token = load_minigpt(assets_dir, device)
+                default_seed = 'o romeo'
+                label_width = '35px'
+            else:
+                model, encode, decode, bos_token = load_hf_model(resolved, device)
+                default_seed = 'Once upon a time'
+                label_width = '85px'
+        else:
+            # User passed their own model — ensure it is on the right device
+            model.to(device)
+            model.eval()
+            bos_token = 0  # sensible default for custom models
+            default_seed = 'o romeo'  # custom models assumed to be MiniGPT-like
+            label_width = '35px'
+            # If no vocabulary handlers provided, fall back to the MiniGPT chars from assets/
+            if encode is None and stoi is None and decode is None and itos is None:
+                from .backends import load_minigpt
+                _, encode, decode, bos_token = load_minigpt(assets_dir, device)
+            else:
+                # Build encode/decode from stoi/itos if only one side is missing
+                if encode is None:
+                    if stoi is None:
+                        raise ValueError("Please provide 'encode' or 'stoi' when passing a custom model.")
+                    encode = lambda s: [stoi.get(c, 0) for c in s]
+                if decode is None:
+                    if itos is None:
+                        raise ValueError("Please provide 'decode' or 'itos' when passing a custom model.")
+                    decode = lambda l: ''.join([itos.get(i, '?') for i in l])
+        
+        # Save to cache
+        _MODEL_CACHE[cache_key] = (model, encode, decode, bos_token, default_seed, label_width)
+
     def is_port_in_use(p):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             return s.connect_ex(('127.0.0.1', p)) == 0
@@ -98,7 +144,7 @@ def start_explorer(model=None, encode=None, decode=None, stoi=None, itos=None,
                     break
                 time.sleep(0.5)
             if is_port_in_use(port):
-                port = None
+                port = None  # Force a new port if we couldn't clear the requested one
 
     if port is None:
         port = random.randint(10240, 65535)
@@ -148,13 +194,19 @@ def start_explorer(model=None, encode=None, decode=None, stoi=None, itos=None,
             
             with torch.no_grad():
                 x = torch.tensor(tokens, dtype=torch.long, device=device).unsqueeze(0)
-                logits = model(x)
+                # use_hf_cache controls HF's internal KV cache (off by default to reduce memory)
+                call_kwargs = {'use_cache': use_hf_cache} if hasattr(model, 'config') else {}
+                raw = model(x, **call_kwargs)
                 # Unpack: raw tensor, tuple, or HuggingFace model output object
-                if isinstance(logits, tuple):
-                    logits = logits[0]
-                elif hasattr(logits, 'logits'):
-                    logits = logits.logits
-                
+                if isinstance(raw, tuple):
+                    logits = raw[0]
+                elif hasattr(raw, 'logits'):
+                    logits = raw.logits
+                else:
+                    logits = raw
+                del raw  # Free the output wrapper / extra tensors immediately
+                del x
+
             def process_logits(logits_1d, t):
                 # Apply top-k filtering for sampling ONLY if requested
                 if sample_from_top_k:
@@ -178,16 +230,17 @@ def start_explorer(model=None, encode=None, decode=None, stoi=None, itos=None,
                 return top10, sampled_char
 
             if return_all:
-                res_list = [process_logits(logits[0, t, :], temp) for t in range(logits.size(1))]
+                res_list = [process_logits(logits[0, t, :].clone(), temp) for t in range(logits.size(1))]
                 payloads = [r[0] for r in res_list]
-                # Return decoded strings for each token (excluding BOS) so frontend can show them correctly
                 token_strings = [decode([t]) for t in tokens[1:]]
+                del logits  # Free the large [1, seq_len, vocab_size] tensor now
                 return jsonify({
                     "top10_all": payloads,
                     "tokens": token_strings
                 })
 
-            last_logits = logits[0, -1, :]
+            last_logits = logits[0, -1, :].clone()
+            del logits  # Free the large tensor before building the response
             top10, sampled_char = process_logits(last_logits, temp)
             return jsonify({
                 "top10": top10, 
@@ -197,9 +250,21 @@ def start_explorer(model=None, encode=None, decode=None, stoi=None, itos=None,
             import traceback
             return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
 
+    @app.route("/reset_memory", methods=["POST", "OPTIONS"])
+    def reset_memory():
+        if request.method == "OPTIONS":
+            return jsonify({}), 200
+        gc.collect()
+        if torch.backends.mps.is_available(): torch.mps.empty_cache()
+        elif torch.cuda.is_available(): torch.cuda.empty_cache()
+        return jsonify({"status": "ok"})
+
     def serve():
-        app.server_ref = make_server('0.0.0.0', port, app)
-        app.server_ref.serve_forever()
+        global _SERVER_REGISTRY
+        srv = make_server('0.0.0.0', port, app)
+        _SERVER_REGISTRY[cache_key] = srv
+        app.server_ref = srv
+        srv.serve_forever()
 
     app.server_ref = None
     threading.Thread(target=serve, daemon=True).start()

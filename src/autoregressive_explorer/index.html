@@ -261,6 +261,7 @@
                 <button id="auto-gen-btn">Auto-Generate</button>
                 <input type="number" id="max-tokens-input" value="200" min="1" max="1000">
                 <span style="font-size: 14px; opacity: 0.8;">Tokens</span>
+                <span id="tok-speed" style="font-size: 13px; opacity: 0.7; display: none; margin-left: 4px;"></span>
             </div>
         </div>
 
@@ -297,6 +298,7 @@
         const generateBtn = document.getElementById('generate-btn');
         const autoGenBtn = document.getElementById('auto-gen-btn');
         const maxTokensInput = document.getElementById('max-tokens-input');
+        const tokSpeedEl = document.getElementById('tok-speed');
         const tempSlider = document.getElementById('temp-slider');
         const tempValInput = document.getElementById('temp-val-input');
         const tempResetBtn = document.getElementById('temp-reset-btn');
@@ -409,6 +411,9 @@
             const text = seedInput.value;
             sequence = [];
             
+            // Flush backend tensor memory before re-fetching (awaited to ensure ordering)
+            await fetch('reset_memory', { method: 'POST', headers: { 'Content-Type': 'application/json' } }).catch(() => {});
+
             const data = await requestAllLogits(text);
             if (!data) return;
 
@@ -751,10 +756,15 @@
 
                 const maxTokens = parseInt(maxTokensInput.value, 10) || 200;
                 let generatedCount = 0;
+                let tStart = performance.now();
 
                 while (isAutoGenerating && generatedCount < maxTokens) {
                     await runGenerationStep(false);
                     generatedCount++;
+                    const elapsed = (performance.now() - tStart) / 1000;
+                    const tps = (generatedCount / elapsed).toFixed(1);
+                    tokSpeedEl.textContent = `${tps} tok/s`;
+                    tokSpeedEl.style.display = 'inline';
                     // Slight delay for visual rhythm
                     await new Promise(r => setTimeout(r, 70));
                 }
@@ -763,6 +773,7 @@
                 autoGenBtn.textContent = 'Auto-Generate';
                 generateBtn.disabled = false;
                 maxTokensInput.disabled = false;
+                tokSpeedEl.style.display = 'none';
             }
         });
 
