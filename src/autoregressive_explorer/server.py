@@ -7,9 +7,11 @@ import logging
 import urllib.request
 import socket
 import random
+import json
 from flask import Flask, request, jsonify
 from IPython.display import IFrame, display, HTML
 from werkzeug.serving import make_server
+from .model import MiniGPT
 
 os.environ["WERKZEUG_RUN_MAIN"] = "true"
 
@@ -45,9 +47,11 @@ def start_explorer(model=None, encode=None, decode=None, stoi=None, itos=None, p
     chars_path = os.path.join(assets_dir, 'chars.json')
     model_path = os.path.join(assets_dir, 'minigpt_weights.pth')
 
+    # Detect device once
+    device = torch.device('mps' if torch.backends.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu')
+
     # Load chars if encode/decode or stoi/itos are missing, OR if model needs to be loaded (to get vocab_size)
     if (encode is None and stoi is None) or (decode is None and itos is None) or (model is None):
-        import json
         if not os.path.exists(chars_path):
             raise FileNotFoundError(f"Missing {chars_path}. Please provide encode/decode or stoi/itos and/or save chars in 'assets/' first.")
         with open(chars_path, 'r', encoding='utf-8') as f:
@@ -60,19 +64,15 @@ def start_explorer(model=None, encode=None, decode=None, stoi=None, itos=None, p
 
     # Auto-load logic if model isn't provided
     if model is None:
-        from .model import MiniGPT
-        
         if not os.path.exists(model_path):
             raise FileNotFoundError(f"Missing {model_path}. Please provide a model, or save weights in 'assets/' first.")
-            
-        device = torch.device('mps' if torch.backends.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu')
-        loaded_data = torch.load(model_path, map_location=device, weights_only=True)
-        
+        checkpoint = torch.load(model_path, map_location=device, weights_only=True)
         model = MiniGPT(vocab_size=len(chars), block_size=64)
-        model.load_state_dict(loaded_data)
+        model.load_state_dict(checkpoint)
             
-        model.to(device)
-        model.eval()
+    # CRITICAL: Ensure the model (whether provided or loaded) is on the correct device and eval mode
+    model.to(device)
+    model.eval()
 
     # print('debug')
     def is_port_in_use(p):
@@ -130,29 +130,28 @@ def start_explorer(model=None, encode=None, decode=None, stoi=None, itos=None, p
         return_all = data.get("return_all", False)
         try:
             tokens = encode(text) if encode else [stoi.get(c, 0) for c in text]
-            # Always prepend [0] (pad/BOS token) to get the unconditional probability for the first char
-            tokens = [0] + tokens
-            max_len = getattr(model, 'block_size', context_length)
-            tokens = tokens[-max_len:]
+            tokens = ([0] + tokens)[-getattr(model, 'block_size', context_length):]
             
-            device = next(model.parameters()).device
-            model.eval()
-            with torch.no_grad():
+            with torch.inference_mode():
                 x = torch.tensor(tokens, dtype=torch.long, device=device).unsqueeze(0)
                 logits = model(x)
                 if isinstance(logits, tuple): logits = logits[0]
                 
-            def get_top10(logits_1d):
-                topk_vals, topk_idx = torch.topk(logits_1d, 10)
-                chars = [decode([i.item()]) if decode else itos.get(i.item(), '?') for i in topk_idx]
-                return [{"char": c, "logit": v.item()} for c, v in zip(chars, topk_vals)]
+            def format_top10(vals, idxs):
+                # Convert to CPU once in bulk if tensor
+                if hasattr(vals, 'tolist'): vals = vals.tolist()
+                if hasattr(idxs, 'tolist'): idxs = idxs.tolist()
+                chars = [decode([i]) if decode else itos.get(i, '?') for i in idxs]
+                return [{"char": c, "logit": v} for c, v in zip(chars, vals)]
 
             if return_all:
-                all_payloads = [get_top10(logits[0, t, :]) for t in range(logits.size(1))]
+                topk_vals, topk_idx = torch.topk(logits[0], 10, dim=-1)
+                all_payloads = [format_top10(v, i) for v, i in zip(topk_vals.tolist(), topk_idx.tolist())]
                 return jsonify({"top10_all": all_payloads})
 
             last_logits = logits[0, -1, :]
-            return jsonify({"top10": get_top10(last_logits)})
+            topk_vals, topk_idx = torch.topk(last_logits, 10)
+            return jsonify({"top10": format_top10(topk_vals, topk_idx)})
         except Exception as e:
             return jsonify({"error": str(e)}), 500
 
