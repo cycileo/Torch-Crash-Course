@@ -106,18 +106,24 @@
             overflow-y: auto;
             font-family: "JetBrains Mono", Consolas, Menlo, monospace;
             font-size: 18px;
-            line-height: 1.8;
-            white-space: pre-wrap;
+            line-height: 1.6;
             padding: 15px;
             background-color: rgba(0, 0, 0, 0.2);
             border-radius: 8px;
             border: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            flex-wrap: wrap;
+            align-items: baseline;
+            align-content: flex-start;
         }
 
         .token {
+            display: inline-block;
+            vertical-align: top;
             border-radius: 2px;
             cursor: pointer;
             transition: all 0.2s;
+            white-space: pre;
         }
 
         .token-start {
@@ -130,6 +136,7 @@
         }
 
         .token-newline {
+            display: inline-block;
             color: #fbbf24;
             opacity: 0.8;
         }
@@ -385,7 +392,7 @@
                     span.textContent = item.char;
                     span.classList.add('token-start');
                 } else if (item.char === '\n' || item.char === '\\n') {
-                    span.textContent = '↵\n';
+                    span.textContent = '↵';
                     span.classList.add('token-newline');
                 } else {
                     span.textContent = item.char;
@@ -396,6 +403,13 @@
                 span.addEventListener('click', () => handleRevert(index));
 
                 display.appendChild(span);
+                
+                // If it's a newline, force a flex break
+                if (item.char === '\n' || item.char === '\\n') {
+                    const br = document.createElement('div');
+                    br.style.width = '100%';
+                    display.appendChild(br);
+                }
             });
         }
 
@@ -403,7 +417,7 @@
             const span = document.createElement('span');
             span.className = 'token flash-new';
             if (item.char === '\n' || item.char === '\\n') {
-                span.textContent = '↵\n';
+                span.textContent = '↵';
                 span.classList.add('token-newline');
             } else {
                 span.textContent = item.char;
@@ -414,6 +428,13 @@
             span.addEventListener('click', () => handleRevert(index));
 
             display.appendChild(span);
+
+            // If it's a newline, force a flex break
+            if (item.char === '\n' || item.char === '\\n') {
+                const br = document.createElement('div');
+                br.style.width = '100%';
+                display.appendChild(br);
+            }
         }
 
         function handleHoverStart(e, index) {
@@ -485,7 +506,8 @@
 
             const prevText = sequence.slice(0, index + 1).filter(s => !s.isStartMarker).map(s => s.char).join('');
             const displayPrevText = prevText.length > 30 ? '...' + prevText.slice(-30) : prevText;
-            const headerEscaped = displayPrevText.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const headerText = displayPrevText.replace(/\n/g, '↵').replace(/\t/g, '→');
+            const headerEscaped = escapeHtml(headerText);
 
             let html = `<div class="tooltip-header">P( next | "${headerEscaped}" )</div>`;
 
