@@ -345,7 +345,7 @@
                 });
                 const data = await res.json();
                 if (data.error) throw new Error(data.error);
-                return data.top10_all;
+                return data;
             } catch (error) {
                 console.error("Failed to fetch all logits:", error);
                 return null;
@@ -356,24 +356,24 @@
             const text = seedInput.value;
             sequence = [];
             
-            // Unconditional start marker
-            sequence.push({ char: '►', isStartMarker: true, nextLogits: null });
+            const data = await requestAllLogits(text);
+            if (!data) return;
+
+            const allLogits = data.top10_all;
+            const tokenStrings = data.tokens;
+
+            // Unconditional start marker gets the first logit distribution (from BOS token)
+            sequence.push({ char: '►', isStartMarker: true, nextLogits: allLogits[0] });
             
-            for (let i = 0; i < text.length; i++) {
-                sequence.push({ char: text[i], nextLogits: null });
+            // Push each token from the seed
+            for (let i = 0; i < tokenStrings.length; i++) {
+                sequence.push({ 
+                    char: tokenStrings[i], 
+                    nextLogits: allLogits[i + 1] || null 
+                });
             }
+            
             renderSequence();
-            
-            const allLogits = await requestAllLogits(text);
-            if (allLogits && allLogits.length > 0) {
-                const offset = sequence.length - allLogits.length;
-                for (let i = 0; i < allLogits.length; i++) {
-                    const seqIndex = i + offset;
-                    if (seqIndex >= 0 && sequence[seqIndex]) {
-                        sequence[seqIndex].nextLogits = allLogits[i];
-                    }
-                }
-            }
         }
 
         function renderSequence() {

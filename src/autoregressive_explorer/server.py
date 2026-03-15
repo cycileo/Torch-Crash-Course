@@ -159,7 +159,12 @@ def start_explorer(model=None, encode=None, decode=None, stoi=None, itos=None,
 
             if return_all:
                 all_payloads = [get_top10(logits[0, t, :]) for t in range(logits.size(1))]
-                return jsonify({"top10_all": all_payloads})
+                # Return decoded strings for each token (excluding BOS) so frontend can show them correctly
+                token_strings = [decode([t]) for t in tokens[1:]]
+                return jsonify({
+                    "top10_all": all_payloads,
+                    "tokens": token_strings
+                })
 
             last_logits = logits[0, -1, :]
             return jsonify({"top10": get_top10(last_logits)})
