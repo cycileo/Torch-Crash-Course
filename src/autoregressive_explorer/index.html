@@ -65,10 +65,18 @@
             border-color: #8b5cf6;
         }
 
-        #seed-input { width: 200px; }
-        #max-tokens-input { width: 50px; }
-        #temp-val-input { width: 45px; text-align: center; }
-        #top-k-input { width: 45px; text-align: center; }
+        #seed-input { width: 150px; }
+        #max-tokens-input, #temp-val-input, #top-k-input { 
+            width: 45px; 
+            text-align: center;
+            padding: 8px 4px;
+        }
+        #max-tokens-input { -moz-appearance: textfield; }
+        #max-tokens-input::-webkit-inner-spin-button,
+        #max-tokens-input::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
 
         button {
             padding: 8px 16px;
@@ -269,7 +277,7 @@
             <div class="slider-group">
                 <label for="temp-slider">Temp:</label>
                 <input type="range" id="temp-slider" min="0" max="100" step="1" value="50" style="width: 150px;">
-                <input type="number" id="temp-val-input" min="0.01" step="0.01" value="1.0">
+                <input type="number" id="temp-val-input" min="0" step="0.01" value="1.0">
                 <button id="temp-reset-btn" title="Reset to 1.0" style="padding: 4px 8px; font-size: 12px;">↺</button>
             </div>
 
@@ -320,25 +328,74 @@
             return sampleTopKChk.checked;
         }
 
+        function getSnappedTemp(val) {
+            // Fix floating point noise first
+            val = Math.round(val * 100) / 100;
+            
+            let step = 0.01;
+            if (val >= 19.95) step = 10.0;
+            else if (val >= 1.95) step = 1.0;
+            else if (val >= 0.195) step = 0.1;
+            else step = 0.01;
+
+            // Snap to the grid defined by the step
+            let snapped = Math.round(val / step) * step;
+            
+            // To be extra safe, if we hit a boundary, re-verify the step
+            // so the NEXT click uses the right resolution.
+            if (snapped >= 19.99) step = 10.0;
+            else if (snapped >= 1.99) step = 1.0;
+            else if (snapped >= 0.199) step = 0.1;
+            else step = 0.01;
+
+            return { val: parseFloat(snapped.toFixed(2)), step: step };
+        }
+
+        function updateTempUI(val, updateInput = true, updateSlider = true) {
+            const { val: snapped, step } = getSnappedTemp(val);
+            
+            if (updateInput) {
+                tempValInput.value = snapped.toString();
+                tempValInput.step = step.toString();
+            }
+            if (updateSlider) {
+                const s = 25 * (Math.log10(snapped) + 2);
+                tempSlider.value = Math.round(Math.max(0, Math.min(100, s)));
+            }
+            return snapped;
+        }
+
+        // Initialize display values
+        updateTempUI(1.0);
+
         tempSlider.addEventListener('input', () => {
             const s = parseInt(tempSlider.value);
             // Logarithmic mapping: s=0 -> 0.01, s=50 -> 1.0, s=100 -> 100.0
-            const val = Math.pow(10, (s / 25) - 2);
-            tempValInput.value = val < 0.1 ? val.toFixed(3) : val.toFixed(2);
+            const rawVal = Math.pow(10, (s / 25) - 2);
+            updateTempUI(rawVal, true, false); // Don't update slider, it's the source
         });
 
         tempValInput.addEventListener('input', () => {
             const val = parseFloat(tempValInput.value);
             if (!isNaN(val) && val > 0) {
-                // Inverse logarithmic mapping
+                // For live typing, just update the slider position and step resolution
+                const { step } = getSnappedTemp(val);
+                tempValInput.step = step.toString();
                 const s = 25 * (Math.log10(val) + 2);
-                tempSlider.value = Math.max(0, Math.min(100, s));
+                tempSlider.value = Math.round(Math.max(0, Math.min(100, s)));
+            }
+        });
+
+        // When user finishes typing or click arrows, force hard snap
+        tempValInput.addEventListener('change', () => {
+            const val = parseFloat(tempValInput.value);
+            if (!isNaN(val) && val > 0) {
+                updateTempUI(val);
             }
         });
 
         tempResetBtn.addEventListener('click', () => {
-            tempSlider.value = 50;
-            tempValInput.value = '1.00';
+            updateTempUI(1.0);
         });
 
         function computeSoftmax(logitsObjArray, temp) {
