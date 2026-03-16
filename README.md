@@ -25,9 +25,3 @@ uv sync
 1. Open `main.ipynb` or `slm_explorer.ipynb`.
 2. Click 'Select Kernel' in the top right corner.
 3. Choose 'Python Environments...' -> './.venv/bin/python'.
-
-#### Using with Jupyter
-```bash
-source .venv/bin/python
-jupyter notebook
-```
