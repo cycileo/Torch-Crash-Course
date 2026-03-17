@@ -62,7 +62,7 @@ An interactive visualization tool designed to open the "black box" of LLMs. It a
 
 ```text
 ├── assets/                      # Model weights, vocabulary, and UI screenshot
-├── data/                        # Dataset loaders (e.g., MNIST, Tiny Shakespeare)
+├── data/                        # Dataset loader for MNIST
 ├── src/                    
 │   └── autoregressive_explorer/  # Backend (Flask) and Frontend (HTML/JS) for the tool
 ├── torch_crash_course.ipynb      # The main instructional notebook
