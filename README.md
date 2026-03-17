@@ -37,10 +37,11 @@ This course is structured into two main interactive components:
 
 ### 1. [torch_crash_course.ipynb](torch_crash_course.ipynb)
 A step-by-step technical journey into the heart of modern AI. This notebook covers:
-- **Manual Gradient Descent**: Implementing optimization from scratch using NumPy.
-- **The PyTorch Way**: Transitioning to Tensors, Autograd, and `nn.Module`.
-- **Building a Mini-GPT**: Constructing a Decoder-only Transformer for next-token prediction.
-- **Training on Tiny Shakespeare**: Watching the model learn to imitate the Bard.
+- **Foundations**: Starting with **Manual Gradient Descent** as a baseline comparison.
+- **The PyTorch Way**: Deep diving into `Tensors`, `Autograd`, and the modular power of `nn.Module`.
+- **Advanced Optimization**: Implementing the **Adam** optimizer and using **Weight Decay** for regularization.
+- **Modern Workflows**: Scaling and organizing training with **PyTorch Lightning**.
+- **Generative Modeling**: Building a Decoder-only Transformer (Mini-GPT) trained on the **Tiny Shakespeare** dataset, featuring a visualization tool for the **conditional token distribution**.
 
 > [!TIP]
 > **Run on Google Colab**: You can access the complete crash course directly on Colab:
@@ -53,12 +54,14 @@ An interactive visualization tool designed to open the "black box" of LLMs. It a
 - **Precise Sampling Control**: Adjust Temperature and Top-K filtering in real-time to witness how they affect creativity and entropy.
 - **Scalable Backends**: Seamlessly switch between the locally trained **Mini-GPT** on Tiny Shakespeare and production-grade models like **GPT-2** or **Qwen3** via HuggingFace integration.
 
+![Autoregressive Explorer UI](assets/explorer_ui.png)
+
 ---
 
-## 📂 Repository Structure
+## Repository Structure
 
 ```text
-├── assets/                      # Model weights and vocabulary metadata
+├── assets/                      # Model weights, vocabulary, and UI screenshot
 ├── data/                        # Dataset loaders (e.g., MNIST, Tiny Shakespeare)
 ├── src/                    
 │   └── autoregressive_explorer/  # Backend (Flask) and Frontend (HTML/JS) for the tool
