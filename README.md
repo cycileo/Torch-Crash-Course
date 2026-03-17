@@ -48,13 +48,19 @@ A step-by-step technical journey into the heart of modern AI. This notebook cove
 > [Access the Colab Notebook](https://colab.research.google.com/drive/1jdWCKd3rXwtRfmJoF7_l_mnbPtOz8-WG?usp=sharing)
 
 ### 2. [autoregressive_explorer.ipynb](autoregressive_explorer.ipynb)
-An interactive visualization tool designed to open the "black box" of LLMs. It allows you to:
-- **Visualize Probabilities**: Hover over text to see the model's confidence and top predictions for every token.
+While the main crash course builds a Mini-GPT from scratch, this standalone explorer serves as a dedicated, high-fidelity playground for inference analysis. It is designed to move beyond training and focus on the **comparative behavior** of different models.
+
+Use this tool to:
+- **Visualize Probabilities**: Hover over text to see the model's confidence and top-k predictions for every token.
 - **Interactive Branching**: Click and edit any part of the sequence to explore alternative "what-if" generation paths.
 - **Precise Sampling Control**: Adjust Temperature and Top-K filtering in real-time to witness how they affect creativity and entropy.
-- **Scalable Backends**: Seamlessly switch between the locally trained **Mini-GPT** on Tiny Shakespeare and production-grade models like **GPT-2** or **Qwen3** via HuggingFace integration.
+- **Scalable Backends**: Compare the locally trained **Mini-GPT** with production-grade models like **GPT-2** or **Qwen3** by loading them through the HuggingFace integration.
 
 ![Autoregressive Explorer UI](assets/explorer_ui.png)
+
+> [!TIP]
+> **Run on Google Colab**: Explore generative mechanics and compare production models directly in your browser:
+> [Access the Explorer on Colab](https://colab.research.google.com/drive/12TkikTJ4FSMNFEVQQb17E8YcXHKxHA25?usp=sharing)
 
 ---
 
