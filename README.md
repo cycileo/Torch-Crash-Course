@@ -45,7 +45,7 @@ A step-by-step technical journey into the heart of modern AI. This notebook cove
 
 > [!TIP]
 > **Run on Google Colab**: You can access the complete crash course directly on Colab:
-> [Access the Colab Notebook](https://colab.research.google.com/drive/1-56gH57IJRpQ9Ako1NqrvKoXgqfvJh-P?usp=sharing)
+> [Access the Colab Notebook](https://colab.research.google.com/drive/1jdWCKd3rXwtRfmJoF7_l_mnbPtOz8-WG?usp=sharing)
 
 ### 2. [autoregressive_explorer.ipynb](autoregressive_explorer.ipynb)
 An interactive visualization tool designed to open the "black box" of LLMs. It allows you to:
